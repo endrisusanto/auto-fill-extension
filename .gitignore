@@ -1,0 +1,10 @@
+# OS metadata files
+.DS_Store
+Thumbs.db
+
+# Developer tools
+.vscode/
+.idea/
+
+# Local configuration
+*.local
