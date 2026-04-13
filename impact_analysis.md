@@ -1,5 +1,6 @@
 # Analisis Dampak: BAS Auto Filler Extension
 
+@endriisusantoo
 Dokumen ini menganalisis manfaat bisnis dan teknis dari penggunaan ekstensi otomatisasi pengisian formulir pada Samsung Build Approval Server (BAS).
 
 ## 1. Efisiensi Waktu (Productivity ROI)
