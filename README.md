@@ -1,4 +1,4 @@
-# BAS Auto Filler Extension
+# auto-fill-extension
 
 Browser extension untuk mengotomatiskan pengisian formulir pada platform **Samsung Build Approval Server (BAS)**. Dirancang untuk meningkatkan produktivitas, mengurangi kesalahan manusia (*human error*), dan memberikan pengalaman "One-Click Submission".
 

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "BAS Auto Filler",
+  "name": "auto-fill-extension",
   "version": "1.0",
   "description": "Auto fill form for Build Approval System",
   "permissions": [
