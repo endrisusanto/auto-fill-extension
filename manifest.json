@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "BAS Auto Filler",
+  "version": "1.0",
+  "description": "Auto fill form for Build Approval System",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://buildapprovalsystem.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icons/icon48.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://buildapprovalsystem.com/*"],
+      "js": ["content.js"]
+    }
+  ]
+}
