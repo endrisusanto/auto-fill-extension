@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAS FILLER | Launching Soon</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,700;0,900;1,400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #fcd34d;
+            --accent: #22c55e;
+            --secondary: #3b82f6;
+            --black: #000000;
+            --white: #ffffff;
+            --shadow: 8px 8px 0px var(--black);
+            --shadow-sm: 4px 4px 0px var(--black);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Public Sans', sans-serif;
+            background-color: var(--bg);
+            color: var(--black);
+            line-height: 1.4;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            border: 4px solid var(--black);
+            background: var(--white);
+            padding: 40px;
+            box-shadow: var(--shadow);
+            margin-bottom: 60px;
+            transform: rotate(-1deg);
+        }
+
+        h1 {
+            font-size: clamp(3rem, 10vw, 6rem);
+            font-weight: 900;
+            text-transform: uppercase;
+            line-height: 0.9;
+            margin-bottom: 20px;
+        }
+
+        .badge {
+            display: inline-block;
+            background: var(--accent);
+            padding: 10px 20px;
+            border: 3px solid var(--black);
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .cta-button {
+            display: inline-block;
+            padding: 20px 40px;
+            background: var(--secondary);
+            color: var(--white);
+            text-decoration: none;
+            font-weight: 900;
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            border: 4px solid var(--black);
+            box-shadow: var(--shadow);
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .cta-button:hover {
+            transform: translate(-4px, -4px);
+            box-shadow: 12px 12px 0px var(--black);
+        }
+
+        .cta-button:active {
+            transform: translate(4px, 4px);
+            box-shadow: 2px 2px 0px var(--black);
+        }
+
+        section {
+            margin-bottom: 80px;
+        }
+
+        h2 {
+            font-size: 3rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 40px;
+            text-decoration: underline;
+            text-decoration-thickness: 10px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .card {
+            background: var(--white);
+            border: 4px solid var(--black);
+            padding: 30px;
+            box-shadow: var(--shadow);
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: scale(1.02);
+        }
+
+        .card h3 {
+            font-size: 1.8rem;
+            font-weight: 900;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+        }
+
+        .card p {
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .install-box {
+            background: #fdf2f8;
+            border: 4px solid var(--black);
+            padding: 40px;
+            box-shadow: var(--shadow);
+        }
+
+        ol {
+            padding-left: 20px;
+        }
+
+        li {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+        }
+
+        code {
+            background: #e2e8f0;
+            padding: 2px 6px;
+            border: 1px solid var(--black);
+        }
+
+        footer {
+            margin-top: 100px;
+            border-top: 4px solid var(--black);
+            padding: 40px 0;
+            text-align: center;
+            background: var(--black);
+            color: var(--white);
+        }
+
+        .marquee {
+            overflow: hidden;
+            white-space: nowrap;
+            background: var(--black);
+            color: var(--white);
+            padding: 10px 0;
+            border: 4px solid var(--black);
+            font-weight: 900;
+            text-transform: uppercase;
+            margin: 40px 0;
+            font-size: 1.5rem;
+        }
+
+        .marquee span {
+            display: inline-block;
+            padding-left: 100%;
+            animation: marquee 20s linear infinite;
+        }
+
+        @keyframes marquee {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(-100%, 0); }
+        }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 3rem; }
+            h2 { font-size: 2rem; }
+            header { padding: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="marquee">
+        <span>BAS FILLER - AUTO FILL FORM - SMR - NORMAL - SKU - PRESET MANAGEMENT - BAS FILLER - AUTO FILL FORM - SMR - NORMAL - SKU - PRESET MANAGEMENT - </span>
+    </div>
+
+    <div class="container">
+        <header>
+            <div class="badge">V1.0 TERSEDIA SEKARANG</div>
+            <h1>BAS<br>FILLER</h1>
+            <p style="font-size: 1.5rem; font-weight: 700; margin-bottom: 30px;">
+                Hemat waktu 400% dalam pengisian formulir BAS. 
+                Satu klik, form beres!
+            </p>
+            <a href="#install" class="cta-button">INSTAL SEKARANG ⚡</a>
+        </header>
+
+        <section id="features">
+            <h2>FITUR UNGGULAN</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>PRESET MANAGER</h3>
+                    <p>Buat banyak profil pengisian (Daily, Bugfix, SKU Khusus). Simpan, edit, dan pindah antar preset dalam sekejap.</p>
+                </div>
+                <div class="card" style="background: var(--accent);">
+                    <h3>AUTO SYNC</h3>
+                    <p>Pilih preset di popup, dan tombol di halaman web akan langsung menyesuaikan datanya secara otomatis.</p>
+                </div>
+                <div class="card">
+                    <h3>SMART DETECTION</h3>
+                    <p>Mendeteksi halaman SMR, Normal, atau SKU secara otomatis dan menyesuaikan bidang yang harus diisi.</p>
+                </div>
+                <div class="card" style="background: var(--secondary); color: white;">
+                    <h3>CLEAN CODE</h3>
+                    <p>Dibuat dengan JavaScript modern yang ringan, tidak memperlambat browser, dan kompatibel antar browser.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="install">
+            <h2>CARA INSTAL</h2>
+            <div class="install-box">
+                <div class="grid">
+                    <div>
+                        <h3 style="margin-bottom: 20px; font-weight: 900; font-size: 1.5rem;">CHROME / EDGE</h3>
+                        <ol>
+                            <li>Download folder ekstensi ini.</li>
+                            <li>Buka <code>chrome://extensions</code>.</li>
+                            <li>Aktifkan <strong>Developer Mode</strong> di pojok kanan atas.</li>
+                            <li>Klik <strong>Load Unpacked</strong>.</li>
+                            <li>Pilih folder <code>auto-fill-extension</code>.</li>
+                        </ol>
+                    </div>
+                    <div>
+                        <h3 style="margin-bottom: 20px; font-weight: 900; font-size: 1.5rem;">FIREFOX</h3>
+                        <ol>
+                            <li>Buka browser Firefox.</li>
+                            <li>Akses <code>about:debugging</code>.</li>
+                            <li>Pilih <strong>This Firefox</strong>.</li>
+                            <li>Klik <strong>Load Temporary Add-on</strong>.</li>
+                            <li>Pilih file <code>manifest.json</code> di folder ekstensi.</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <div class="card" style="text-align: center; background: var(--black); color: var(--white);">
+                <h3 style="font-size: 2.5rem; margin-bottom: 10px;">SIAP UNTUK LEBIH PRODUKTIF?</h3>
+                <p style="margin-bottom: 30px;">Gunakan BAS Filler dan lupakan ribetnya isi form manual.</p>
+                <a href="#install" class="cta-button" style="background: var(--bg); color: var(--black);">GASKEUN! 🚀</a>
+            </div>
+        </section>
+    </div>
+
+    <footer>
+        <p>&copy; 2026 BAS FILLER PROJECT | INTERNAL USE ONLY</p>
+    </footer>
+
+</body>
+</html>
