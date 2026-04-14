@@ -2,52 +2,318 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BAS Filler Presets</title>
   <style>
-    body {
-      width: 250px;
-      padding: 15px;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #f4f7f9;
-      margin: 0;
+    :root {
+      --primary: #1abc9c;
+      --primary-dark: #16a085;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #1e293b;
+      --text-light: #64748b;
+      --border: #e2e8f0;
+      --danger: #ef4444;
     }
+
+    body {
+      width: 350px;
+      margin: 0;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 500px;
+    }
+
+    header {
+      background: var(--card);
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      color: var(--primary-dark);
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
     .container {
+      padding: 16px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    /* List View */
+    .preset-list {
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
-    h2 {
-      margin: 0 0 10px 0;
-      font-size: 18px;
-      color: #1e3448;
-      border-bottom: 2px solid #1abc9c;
-      padding-bottom: 5px;
+
+    .preset-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
     }
-    button {
-      padding: 10px;
-      background-color: #1abc9c;
+
+    .preset-card:hover {
+      border-color: var(--primary);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+
+    .preset-card.active {
+      border-color: var(--primary);
+      background: #f0fdfa;
+    }
+
+    .preset-card.active::after {
+      content: '✓';
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      color: var(--primary);
+      font-weight: bold;
+    }
+
+    .preset-name {
+      font-weight: 600;
+      font-size: 15px;
+      margin-bottom: 4px;
+      padding-right: 24px;
+    }
+
+    .preset-details {
+      font-size: 12px;
+      color: var(--text-light);
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+
+    .btn-sm {
+      padding: 4px 8px;
+      font-size: 11px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: white;
+      color: var(--text-light);
+    }
+
+    .btn-sm:hover {
+      background: #f1f5f9;
+      color: var(--text);
+    }
+
+    .btn-sm.danger:hover {
+      background: #fef2f2;
+      color: var(--danger);
+      border-color: #fee2e2;
+    }
+
+    /* Form View */
+    .view {
+      display: none;
+    }
+
+    .view.show {
+      display: block;
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: var(--text-light);
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      box-sizing: border-box;
+      font-family: inherit;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(26, 188, 156, 0.1);
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+      padding-bottom: 20px;
+    }
+
+    button.primary {
+      background: var(--primary);
       color: white;
       border: none;
-      border-radius: 4px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-weight: 600;
       cursor: pointer;
-      font-size: 14px;
-      font-weight: bold;
-      transition: background 0.3s;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }
-    button:hover {
-      background-color: #16a085;
+
+    button.primary:hover {
+      background: var(--primary-dark);
     }
-    .info {
-      font-size: 11px;
-      color: #666;
+
+    button.secondary {
+      background: white;
+      border: 1px solid var(--border);
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--text-light);
+    }
+
+    button.secondary:hover {
+      background: #f1f5f9;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-light);
+    }
+
+    .footer {
+      padding: 16px;
+      background: white;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+    }
+
+    .main-btn {
+      flex: 2;
+    }
+
+    .add-btn {
+      flex: 1;
     }
   </style>
 </head>
 <body>
+  <header>
+    <h1>BAS Preset Manager</h1>
+    <div id="headerActions"></div>
+  </header>
+
   <div class="container">
-    <h2>BAS Filler</h2>
-    <button id="fillBtn">Auto-Fill Form</button>
-    <div class="info">Ready to fill Endri Susanto's profile.</div>
+    <!-- List View -->
+    <div id="listView" class="view show">
+      <div id="presetList" class="preset-list">
+        <!-- Presets will be injected here -->
+      </div>
+    </div>
+
+    <!-- Form View -->
+    <div id="formView" class="view">
+      <form id="presetForm">
+        <input type="hidden" id="presetId">
+        
+        <div class="form-group">
+          <label>Preset Name</label>
+          <input type="text" id="name" placeholder="E.g. Daily Build Indonesia" required>
+        </div>
+
+        <div class="form-group">
+          <label>Submitter Name</label>
+          <input type="text" id="submitterName" required>
+        </div>
+
+        <div class="form-group">
+          <label>PL Email</label>
+          <input type="email" id="plEmail" required>
+        </div>
+
+        <div class="form-group">
+          <label>CSC Type</label>
+          <select id="cscType">
+            <option value="MainCSC">MainCSC</option>
+            <option value="SubCSC">SubCSC</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Quick Build Path (Prefix)</label>
+          <input type="text" id="quickBuildPath" placeholder="https://android.qb...">
+        </div>
+
+        <div class="form-group">
+          <label>SCAT Link</label>
+          <input type="text" id="scatLink" placeholder="https://mobilerndhub...">
+        </div>
+
+        <div class="form-group">
+          <label>Notification Emails (Comma separated)</label>
+          <textarea id="notificationEmails" rows="3" placeholder="email1@samsung.com, email2@samsung.com"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Carrier</label>
+          <input type="text" id="carrier" placeholder="XID">
+        </div>
+
+        <div class="form-group">
+          <label>Countries (Comma separated)</label>
+          <input type="text" id="countries" placeholder="Indonesia, Thailand">
+        </div>
+
+        <div class="actions">
+          <button type="button" class="secondary" id="cancelBtn">Cancel</button>
+          <button type="submit" class="primary">Save Preset</button>
+        </div>
+      </form>
+    </div>
   </div>
+
+  <div id="listFooter" class="footer">
+    <button id="fillBtn" class="primary main-btn">
+      <span>⚡</span> Auto-Fill with Selected
+    </button>
+    <button id="addBtn" class="secondary add-btn">
+      <span>+</span> New
+    </button>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>

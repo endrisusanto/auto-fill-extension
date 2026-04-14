@@ -4,20 +4,31 @@ const api = typeof browser !== "undefined" ? browser : chrome;
 // Add a listener for messages from the popup
 api.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "fillForm") {
-        fillBASForm();
+        if (request.data) {
+            // Data provided directly from popup
+            fillBASForm(request.data);
+        } else {
+            // Fetch from storage if triggered from overlay button
+            api.storage.local.get(['bas_presets', 'active_preset_id'], (result) => {
+                const presets = result.bas_presets || [];
+                const activeId = result.active_preset_id;
+                const preset = presets.find(p => p.id === activeId) || presets[0];
+                if (preset) {
+                    fillBASForm(preset);
+                } else {
+                    console.error("No preset found to fill form.");
+                    alert("Please set a preset in the extension popup first.");
+                }
+            });
+        }
     }
 });
 
-const DATA = {
-    submitterName: "Endri Susanto",
-    plEmail: "danar.kurnia@samsung.com",
-    cscType: "MainCSC",
-    quickBuildPath: "https://android.qb.sec.samsung.net/build/106894213",
-    scatLink: "https://mobilerndhub.sec.samsung.net/scat/test/2956447",
-    notificationEmails: ["endri.s@samsung.com", "lufti.b@samsung.com", "apta.p@samsung.com", "danar.kurnia@samsung.com", "aulia.am@samsung.com"],
-    carrier: "XID",
-    countries: ["Indonesia"]
-};
+// Helper to parse comma separated strings to arrays
+function parseList(str) {
+    if (!str) return [];
+    return str.split(',').map(s => s.trim()).filter(s => s !== "");
+}
 
 // Inject Overlay Button
 function injectOverlayButton() {
@@ -42,6 +53,7 @@ function injectOverlayButton() {
     else if (hash.includes('submit-sku')) pageLabel = "SKU";
 
     btn.innerHTML = `⚡ AUTO FILL ${pageLabel}`;
+    btn.title = "Click to auto-fill. Right click to change presets in extension popup.";
     btn.style.cssText = `
         position: fixed;
         top: 50%;
@@ -72,26 +84,44 @@ function injectOverlayButton() {
     };
 
     btn.onclick = async () => {
-        btn.innerHTML = 'Filling...';
+        btn.innerHTML = 'Fetching Preset...';
         btn.disabled = true;
-        await fillBASForm();
-        btn.innerHTML = 'Done! ✨';
-        
-        btn.classList.add('minimized');
-        btn.style.top = 'auto';
-        btn.style.left = 'auto';
-        btn.style.bottom = '20px';
-        btn.style.right = '20px';
-        btn.style.transform = 'none';
-        btn.style.padding = '10px 20px';
-        btn.style.fontSize = '14px';
-        btn.style.background = 'rgba(26, 188, 156, 0.9)';
-        btn.style.border = '1px solid white';
-        
-        setTimeout(() => {
-            btn.innerHTML = `⚡ RE-FILL ${pageLabel}`;
-            btn.disabled = false;
-        }, 2000);
+
+        api.storage.local.get(['bas_presets', 'active_preset_id'], async (result) => {
+            const presets = result.bas_presets || [];
+            const activeId = result.active_preset_id;
+            const preset = presets.find(p => p.id === activeId) || presets[0];
+
+            if (preset) {
+                btn.innerHTML = 'Filling...';
+                await fillBASForm(preset);
+                btn.innerHTML = 'Done! ✨';
+                
+                btn.classList.add('minimized');
+                btn.style.top = 'auto';
+                btn.style.left = 'auto';
+                btn.style.bottom = '20px';
+                btn.style.right = '20px';
+                btn.style.transform = 'none';
+                btn.style.padding = '10px 20px';
+                btn.style.fontSize = '14px';
+                btn.style.background = 'rgba(26, 188, 156, 0.9)';
+                btn.style.border = '1px solid white';
+                
+                setTimeout(() => {
+                    btn.innerHTML = `⚡ RE-FILL ${pageLabel}`;
+                    btn.disabled = false;
+                }, 2000);
+            } else {
+                btn.innerHTML = 'Error: No Preset';
+                btn.style.background = 'rgba(231, 76, 60, 0.8)';
+                setTimeout(() => {
+                    btn.innerHTML = `⚡ AUTO FILL ${pageLabel}`;
+                    btn.disabled = false;
+                    btn.style.background = 'rgba(26, 188, 156, 0.4)';
+                }, 3000);
+            }
+        });
     };
 
     const closeBtn = document.createElement('span');
@@ -121,11 +151,12 @@ async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function fillBASForm() {
-    console.log("Starting Auto-Fill...");
+async function fillBASForm(preset) {
+    console.log("Starting Auto-Fill with preset:", preset.name);
     const hash = window.location.hash;
 
     const setInputValue = (selector, value) => {
+        if (!value) return false;
         const el = document.querySelector(selector);
         if (el) {
             el.value = value;
@@ -138,35 +169,34 @@ async function fillBASForm() {
     };
 
     // 1. Common Text Fields
-    setInputValue('input[formcontrolname="submitterName"]', DATA.submitterName);
-    setInputValue('input[formcontrolname="plEmail"]', DATA.plEmail);
+    setInputValue('input[formcontrolname="submitterName"]', preset.submitterName);
+    setInputValue('input[formcontrolname="plEmail"]', preset.plEmail);
     
     // Page specific QuickBuildPath detection
     if (hash.includes('smr')) {
-        setInputValue('input[formcontrolname="quickBuildPath"]', DATA.quickBuildPath);
-        setInputValue('input[formcontrolname="scatLink"]', DATA.scatLink);
+        setInputValue('input[formcontrolname="quickBuildPath"]', preset.quickBuildPath);
+        setInputValue('input[formcontrolname="scatLink"]', preset.scatLink);
     } else {
         // For Normal/SKU pages
         const qbField = document.querySelector('input[formcontrolname="qbPath"]') || document.querySelector('input[placeholder*="android.qb"]');
-        if (qbField) {
-            qbField.value = DATA.quickBuildPath;
+        if (qbField && preset.quickBuildPath) {
+            qbField.value = preset.quickBuildPath;
             qbField.dispatchEvent(new Event('input', { bubbles: true }));
         }
     }
 
     // 2. Specialty Selects (CSC Type)
-    // Run on any page that has the cscType mat-select
     const cscSelect = document.querySelector('mat-select[formcontrolname="cscType"]');
-    if (cscSelect) {
+    if (cscSelect && preset.cscType) {
         const currentVal = cscSelect.querySelector('.mat-mdc-select-value-text')?.textContent.trim();
-        if (currentVal !== DATA.cscType) {
-            console.log("Setting CSC Type to:", DATA.cscType);
+        if (currentVal !== preset.cscType) {
+            console.log("Setting CSC Type to:", preset.cscType);
             const trigger = cscSelect.querySelector('.mat-mdc-select-trigger') || cscSelect;
             trigger.click();
             await sleep(600);
             const options = Array.from(document.querySelectorAll('mat-option, .mat-mdc-option, [role="option"]'));
             for (let opt of options) {
-                if (opt.textContent.trim().includes(DATA.cscType)) {
+                if (opt.textContent.trim().includes(preset.cscType)) {
                     opt.click();
                     break;
                 }
@@ -174,29 +204,26 @@ async function fillBASForm() {
         }
     }
 
-    // 3. Notification Emails (Check for duplicates)
-    // Find notification input more aggressively
+    // 3. Notification Emails
     const emailInput = document.querySelector('input[formcontrolname="notificationEmail"]') || 
                        document.querySelector('.mat-mdc-chip-grid input') ||
                        document.querySelector('input[placeholder*="Separated by"]');
     
-    if (emailInput) {
+    if (emailInput && preset.notificationEmails) {
         console.log("Filling Notification Emails...");
-        // Get existing chips text
+        const emails = parseList(preset.notificationEmails);
+        
         const existingChips = Array.from(document.querySelectorAll('.mat-mdc-chip-action-label, .mdc-evolution-chip__text-label, mat-chip-row'))
             .map(chip => chip.textContent.trim().toLowerCase());
 
-        for (let email of DATA.notificationEmails) {
+        for (let email of emails) {
             const cleanEmail = email.trim().toLowerCase();
-            // Check if email is already in the list
             if (!existingChips.some(chipText => chipText.includes(cleanEmail))) {
                 emailInput.value = email;
                 emailInput.dispatchEvent(new Event('input', { bubbles: true }));
                 emailInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
                 existingChips.push(cleanEmail);
                 await sleep(200);
-            } else {
-                console.log("Skipping duplicate email:", email);
             }
         }
     }
@@ -213,19 +240,19 @@ async function fillBASForm() {
             }
         }
 
-        if (carrierSelect) {
+        if (carrierSelect && preset.carrier) {
             const currentCarrier = carrierSelect.querySelector('.ng-value')?.textContent.trim();
-            if (!currentCarrier || !currentCarrier.includes(DATA.carrier)) {
+            if (!currentCarrier || !currentCarrier.includes(preset.carrier)) {
                 carrierSelect.click();
                 await sleep(400);
                 const searchInput = carrierSelect.querySelector('input');
                 if (searchInput) {
-                    searchInput.value = DATA.carrier;
+                    searchInput.value = preset.carrier;
                     searchInput.dispatchEvent(new Event('input', { bubbles: true }));
                     await sleep(300);
                     const ngOptions = document.querySelectorAll('.ng-option');
                     for (let opt of ngOptions) {
-                        if (opt.textContent.trim().split('\n')[0].trim() === DATA.carrier) {
+                        if (opt.textContent.trim().split('\n')[0].trim() === preset.carrier) {
                             opt.click();
                             break;
                         }
@@ -235,7 +262,8 @@ async function fillBASForm() {
         }
 
         const countryDropdown = document.querySelector('ng-multiselect-dropdown[formcontrolname="countries"]');
-        if (countryDropdown) {
+        if (countryDropdown && preset.countries) {
+            const countries = parseList(preset.countries);
             const dropdownBtn = countryDropdown.querySelector('.dropdown-btn');
             if (dropdownBtn) {
                 dropdownBtn.click();
@@ -244,7 +272,7 @@ async function fillBASForm() {
                 for (let item of listItems) {
                     const label = item.textContent.trim();
                     const checkbox = item.querySelector('input[type="checkbox"]');
-                    if (DATA.countries.some(c => label.includes(c))) {
+                    if (countries.some(c => label.includes(c))) {
                         if (checkbox && !checkbox.checked) {
                             item.click();
                             await sleep(100);

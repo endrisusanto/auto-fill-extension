@@ -3,11 +3,13 @@
 Browser extension untuk mengotomatiskan pengisian formulir pada platform **Samsung Build Approval Server (BAS)**. Dirancang untuk meningkatkan produktivitas, mengurangi kesalahan manusia (*human error*), dan memberikan pengalaman "One-Click Submission".
 
 ## 🚀 Fitur Utama
+- **Preset Management**: Simpan dan kelola banyak profil data (misal: Daily Build, Bug Fix, SKU Khusus) melalui popup extension.
 - **Multi-Form Support**: Mendukung pengisian otomatis untuk halaman **SMR**, **Normal**, dan **SKU**.
-- **Smart Data Filling**: Mengisi Submitter Name, PL Email, CSC Type (MainCSC), QuickBuildPath, dan SCAT URL secara instan.
-- **Dynamic Selects**: Otomatis memilih Carrier (XID) dan Country (Indonesia) pada komponen Angular khusus.
+- **Smart Data Filling**: Mengisi Submitter Name, PL Email, CSC Type, QuickBuildPath, dan SCAT URL secara instan.
+- **Dynamic Selects**: Otomatis memilih Carrier dan Country pada komponen Angular/Material khusus.
 - **Intelligent Email List**: Menambahkan daftar email notifikasi secara otomatis dan menghapus duplikasi email yang sudah ada.
 - **Glassmorphism UI**: Tombol overlay transparan di tengah layar untuk akses cepat, yang akan meminimalkan diri ke pojok kanan bawah setelah digunakan.
+- **One-Click Sync**: Pilih preset di popup, dan tombol di halaman akan otomatis menggunakan data dari preset tersebut.
 - **Cross-Browser Compatibility**: Bekerja di Firefox, Google Chrome, dan Microsoft Edge.
 
 ## 🛠️ Instalasi

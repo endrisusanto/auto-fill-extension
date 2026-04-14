@@ -5,7 +5,8 @@
   "description": "Auto fill form for Build Approval System",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "storage"
   ],
   "host_permissions": [
     "https://buildapprovalsystem.com/*"
