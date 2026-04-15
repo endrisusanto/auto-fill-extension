@@ -52,7 +52,7 @@ function injectOverlayButton() {
     else if (hash.includes('submit-normal') || hash.includes('regularSubmission')) pageLabel = "NORMAL";
     else if (hash.includes('submit-sku')) pageLabel = "SKU";
 
-    btn.innerHTML = `⚡ AUTO FILL ${pageLabel}`;
+    btn.innerHTML = `🐱 AUTO FILL ${pageLabel}`;
     btn.title = "Click to auto-fill. Right click to change presets in extension popup.";
     btn.style.cssText = `
         position: fixed;
@@ -98,18 +98,18 @@ function injectOverlayButton() {
                 btn.innerHTML = 'Done! ✨';
                 
                 btn.classList.add('minimized');
-                btn.style.top = 'auto';
+                btn.style.top = '50%';
                 btn.style.left = 'auto';
-                btn.style.bottom = '20px';
+                btn.style.bottom = 'auto';
                 btn.style.right = '20px';
-                btn.style.transform = 'none';
+                btn.style.transform = 'translateY(-50%)';
                 btn.style.padding = '10px 20px';
                 btn.style.fontSize = '14px';
                 btn.style.background = 'rgba(26, 188, 156, 0.9)';
                 btn.style.border = '1px solid white';
                 
                 setTimeout(() => {
-                    btn.innerHTML = `⚡ RE-FILL ${pageLabel}`;
+                    btn.innerHTML = `🐱 RE-FILL ${pageLabel}`;
                     btn.disabled = false;
                 }, 2000);
             } else {
@@ -145,7 +145,69 @@ function injectOverlayButton() {
 }
 
 // Periodically check for injection (Better for SPAs)
-setInterval(injectOverlayButton, 1000);
+setInterval(() => {
+    injectOverlayButton();
+    autoSelectCategoryEmail();
+}, 1000);
+
+async function autoSelectCategoryEmail() {
+    if (!window.location.hash.includes('ongoing-submissions')) return;
+    
+    // Find Choose Category dropdown
+    const matSelects = document.querySelectorAll('mat-select');
+    let categorySelect = null;
+    
+    for (let select of matSelects) {
+        const placeholder = select.getAttribute('placeholder') || "";
+        const label = select.closest('mat-form-field')?.querySelector('mat-label')?.textContent || "";
+        if (placeholder.includes('Choose Category') || label.includes('Choose Category')) {
+            categorySelect = select;
+            break;
+        }
+    }
+    
+    // Fallback: if we are on ongoing-submissions and can't find by label, 
+    // it's likely the only mat-select or the first one.
+    if (!categorySelect) categorySelect = matSelects[0];
+
+    if (categorySelect) {
+        const valueText = categorySelect.querySelector('.mat-mdc-select-value-text, .mat-select-value-text');
+        const currentVal = valueText?.textContent.trim();
+        
+        // Only auto-fill if it's not already "Email" and we haven't done it this "session"
+        // We use a property to avoid overriding user changes repeatedly
+        if (currentVal !== "Email" && !categorySelect.getAttribute('data-auto-filled')) {
+            console.log("Auto-selecting Category: Email");
+            const trigger = categorySelect.querySelector('.mat-mdc-select-trigger') || categorySelect;
+            trigger.click();
+            
+            // Wait for the panel to appear
+            await sleep(500);
+            
+            const options = Array.from(document.querySelectorAll('mat-option, .mat-mdc-option, [role="option"]'));
+            let found = false;
+            for (let opt of options) {
+                if (opt.textContent.trim() === "Email") {
+                    opt.click();
+                    categorySelect.setAttribute('data-auto-filled', 'true');
+                    found = true;
+                    break;
+                }
+            }
+            
+            // If not found, maybe the panel didn't open or it's different.
+            // Don't mark as auto-filled so it can try again.
+            if (!found) {
+                // Click outside to close panel if it stayed open
+                document.body.click();
+            }
+        }
+    } else {
+        // If we leave the page, the button/select might be gone, 
+        // but just to be safe, we don't need to reset anything here 
+        // as categorySelect is local to the function call.
+    }
+}
 
 async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
