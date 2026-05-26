@@ -87,6 +87,13 @@ function injectOverlayButton() {
         btn.innerHTML = 'Fetching Preset...';
         btn.disabled = true;
 
+        if (typeof api === 'undefined' || !api.storage) {
+            alert("Extension context was invalidated. Please refresh the page to use Auto-Fill.");
+            btn.innerHTML = 'Error: Refresh Page';
+            btn.disabled = false;
+            return;
+        }
+
         api.storage.local.get(['bas_presets', 'active_preset_id'], async (result) => {
             const presets = result.bas_presets || [];
             const activeId = result.active_preset_id;
@@ -148,10 +155,12 @@ function injectOverlayButton() {
 setInterval(() => {
     injectOverlayButton();
     autoSelectCategoryEmail();
+    autoCloseSuccessModal();
 }, 1000);
 
 async function autoSelectCategoryEmail() {
-    if (!window.location.hash.includes('ongoing-submissions')) return;
+    const hash = window.location.hash;
+    if (!hash.includes('ongoing-submissions') && !hash.includes('mysubmissions-submitter')) return;
     
     // Find Choose Category dropdown
     const matSelects = document.querySelectorAll('mat-select');
@@ -206,6 +215,31 @@ async function autoSelectCategoryEmail() {
         // If we leave the page, the button/select might be gone, 
         // but just to be safe, we don't need to reset anything here 
         // as categorySelect is local to the function call.
+    }
+}
+
+function autoCloseSuccessModal() {
+    // Search for modal-header with class success
+    const successHeader = document.querySelector('.modal-header.success') || 
+                          Array.from(document.querySelectorAll('.modal-header')).find(el => el.textContent.toLowerCase().includes('success') || el.classList.contains('success'));
+    
+    if (successHeader) {
+        // Find the modal container to search specifically inside it first
+        const modalContainer = successHeader.closest('.modal, mat-dialog-container, .modal-content, .modal-dialog') || document.body;
+        
+        // Find close button
+        const closeBtn = modalContainer.querySelector('.btn-close') || 
+                         modalContainer.querySelector('.close') || 
+                         modalContainer.querySelector('button[aria-label="Close"]') ||
+                         successHeader.querySelector('.btn-close, .close') ||
+                         document.querySelector('.btn-close') ||
+                         document.querySelector('.close');
+        
+        if (closeBtn) {
+            console.log("Success modal detected! Auto-clicking close button...");
+            closeBtn.click();
+            showToast("Successfully submitted and auto-closed success modal! ✨", "success");
+        }
     }
 }
 
@@ -348,5 +382,320 @@ async function fillBASForm(preset) {
         }
     }
 
+    // 5. Automatic File Upload / Dropzone Trigger
+    const fileInput = document.querySelector('.uploadfilecontainer input[type="file"]') ||
+                      document.querySelector('file-drag-drop input[type="file"][accept*=".zip"]') || 
+                      document.querySelector('input[type="file"][accept*=".zip"]');
+    if (fileInput) {
+        console.log("Auto-triggering ZIP folder upload...");
+        // Guide user visually since directory picker requires user gesture
+        highlightDropzone();
+        showToast("Select a folder containing ZIP files for auto-upload.", "info");
+        
+        try {
+            fileInput.click();
+        } catch (e) {
+            console.warn("Programmatic click on file input failed:", e);
+        }
+    } else {
+        // If there is no file uploader on this page, proceed directly with form submission steps
+        setTimeout(proceedSteps, 1000);
+    }
+
     console.log("Auto-Fill Completed!");
+}
+
+// Helper to extract the model name from the page inputs
+function getModelName() {
+    const baseModelEl = document.querySelector('input[formcontrolname="baseModel"]');
+    if (baseModelEl && baseModelEl.value) {
+        return baseModelEl.value.trim();
+    }
+    const pdaVersionEl = document.querySelector('input[formcontrolname="pdaVersion"]') || 
+                         document.querySelector('input[placeholder*="PDA"]');
+    if (pdaVersionEl && pdaVersionEl.value) {
+        const val = pdaVersionEl.value.trim();
+        const match = val.match(/^([A-Z]\d{3}[A-Z])/i);
+        if (match) {
+            return "SM-" + match[1].toUpperCase();
+        }
+    }
+    return "";
+}
+
+// Listen for click events on the dropzone or file input to enable directory selection or auto-bypass via local server
+document.addEventListener('click', async (event) => {
+    // Only active on specific pages
+    const hash = window.location.hash;
+    const isFolderUploadPage = hash.includes('submit-normal') || hash.includes('smrSecond') || hash.includes('submit-sku');
+    if (!isFolderUploadPage) return;
+
+    const target = event.target;
+    
+    // Find the dropzone container or the file input
+    const dropzone = target.closest('.uploadfilecontainer') || target.closest('file-drag-drop');
+    const isFileInput = target.tagName === 'INPUT' && target.type === 'file';
+    
+    if (dropzone || isFileInput) {
+        // Find the input element associated with it
+        const fileInput = isFileInput ? target : (dropzone.querySelector('input[type="file"]') || document.querySelector('input[type="file"][accept*=".zip"]'));
+        
+        if (fileInput && (!fileInput.accept || fileInput.accept.includes('.zip'))) {
+            // If this is a fallback click triggered from the catch block, let it proceed to open the native dialog
+            if (fileInput.dataset.bypassFallback === 'true') {
+                fileInput.dataset.bypassFallback = 'false';
+                return;
+            }
+
+            // Prevent default click behavior synchronously to block native file dialog
+            event.preventDefault();
+            event.stopPropagation();
+            
+            // Remove pulsing highlights if active
+            removeDropzoneHighlight();
+
+            const modelName = getModelName();
+            console.log("Attempting auto-bypass for folder selection using model:", modelName);
+            
+            try {
+                showToast("Bypassing picker. Fetching zip files from local server...", "info");
+                
+                const response = await fetch(`http://127.0.0.1:19000/get-zips?model=${encodeURIComponent(modelName)}`);
+                if (!response.ok) throw new Error("Local server error: " + response.status);
+                
+                const data = await response.json();
+                if (!data.files || data.files.length === 0) {
+                    showToast(`No zip files found in local folder: ${data.folder}`, "warning");
+                    return;
+                }
+                
+                const zipFiles = data.files.map(f => {
+                    const binary = atob(f.content);
+                    const array = [];
+                    for (let i = 0; i < binary.length; i++) {
+                        array.push(binary.charCodeAt(i));
+                    }
+                    const blob = new Blob([new Uint8Array(array)], { type: 'application/zip' });
+                    return new File([blob], f.name, { type: 'application/zip' });
+                });
+                
+                const dataTransfer = new DataTransfer();
+                zipFiles.forEach(file => dataTransfer.items.add(file));
+                fileInput.files = dataTransfer.files;
+                
+                // Dispatch change event to let Angular process the files
+                fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+                showToast(`Auto-uploaded ${zipFiles.length} zip file(s) from: ${data.folder.split('/').pop()}`, "success");
+                
+                // Automatically proceed with Next -> Proceed -> Update steps
+                setTimeout(proceedSteps, 1000);
+            } catch (err) {
+                console.warn("Local server auto-bypass failed, falling back to manual picker:", err);
+                
+                // Set fallback flag, enable directory selection, and trigger click again
+                fileInput.webkitdirectory = true;
+                fileInput.directory = true;
+                fileInput.dataset.bypassFallback = 'true';
+                fileInput.click();
+            }
+        }
+    }
+}, true); // Capture phase is critical to run before other handlers
+
+// Listen for change events on the file input to filter and handle manual folder selection (when helper server is not running)
+document.addEventListener('change', (event) => {
+    // Only active on specific pages
+    const hash = window.location.hash;
+    const isFolderUploadPage = hash.includes('submit-normal') || hash.includes('smrSecond') || hash.includes('submit-sku');
+    if (!isFolderUploadPage) return;
+
+    const target = event.target;
+    if (target && target.tagName === 'INPUT' && target.type === 'file' && target.webkitdirectory) {
+        // Stop default propagation so we can filter files before the web app processes them
+        event.stopPropagation();
+        
+        const originalFiles = Array.from(target.files);
+        const zipFiles = originalFiles.filter(file => file.name.toLowerCase().endsWith('.zip'));
+        
+        console.log(`Manual folder upload triggered. Found ${zipFiles.length} zip files out of ${originalFiles.length} files.`);
+        
+        // Reset webkitdirectory so subsequent normal clicks behave normally
+        target.webkitdirectory = false;
+        target.directory = false;
+        
+        if (zipFiles.length === 0) {
+            showToast("No .zip files found in the selected folder.", "warning");
+            target.value = null; // Reset value
+            return;
+        }
+
+        // Set the filtered ZIP files to the input files using DataTransfer
+        const dataTransfer = new DataTransfer();
+        zipFiles.forEach(file => dataTransfer.items.add(file));
+        target.files = dataTransfer.files;
+        
+        // Dispatch new change event to let Angular/framework handle it
+        target.dispatchEvent(new Event('change', { bubbles: true }));
+        showToast(`Successfully uploaded ${zipFiles.length} ZIP file(s) from folder.`, "success");
+        
+        // Automatically proceed with Next -> Proceed -> Update steps
+        setTimeout(proceedSteps, 1000);
+    }
+}, true); // Capture phase
+
+// Step-by-step automation: Next -> Proceed (modal) -> Update
+async function proceedSteps() {
+    console.log("Starting next steps automation...");
+    
+    // Wait for any file uploads or spinners to complete
+    await sleep(1500);
+    let attempts = 0;
+    while (attempts < 12) {
+        const progressBar = document.querySelector('.progress-bar');
+        const spinner = document.querySelector('ngx-spinner') || document.querySelector('.spinner-container') || document.querySelector('.spinner');
+        const isUploading = (progressBar && progressBar.style.width !== '100%' && progressBar.style.width !== '0%' && progressBar.style.width !== '') || 
+                            (spinner && (spinner.style.display !== 'none' && !spinner.classList.contains('hidden')));
+        if (!isUploading) break;
+        
+        console.log("Upload or page spinner is active, waiting...");
+        await sleep(1000);
+        attempts++;
+    }
+
+    // 1. Click "Next" button
+    console.log("Clicking 'Next' button...");
+    const nextBtn = Array.from(document.querySelectorAll('button')).find(btn => {
+        const text = btn.textContent.trim().toLowerCase();
+        return text === 'next' || btn.classList.contains('bas-primary-btn');
+    }) || document.querySelector('.bas-primary-btn');
+
+    if (nextBtn) {
+        nextBtn.click();
+        showToast("Clicked 'Next'. Waiting for modal...", "info");
+        await sleep(1500); // Wait for modal to load
+
+        // 2. Click "Proceed" button in the modal
+        console.log("Looking for 'Proceed' button...");
+        const proceedBtn = Array.from(document.querySelectorAll('button, [role="button"], span')).find(el => {
+            const text = el.textContent.trim().toLowerCase();
+            return text === 'proceed' || text === 'yes, proceed' || text.includes('proceed');
+        });
+
+        if (proceedBtn) {
+            proceedBtn.click();
+            showToast("Clicked 'Proceed'. Waiting for transition...", "info");
+            await sleep(1500); // Wait for page transition / update button load
+
+            // 3. Click "Update" button
+            console.log("Looking for 'Update' button...");
+            const updateBtn = Array.from(document.querySelectorAll('button, [role="button"], span')).find(el => {
+                const text = el.textContent.trim().toLowerCase();
+                return text === 'update' || text === 'submit' || text.includes('update');
+            });
+
+            if (updateBtn) {
+                updateBtn.click();
+                showToast("Form successfully updated/submitted! ✨", "success");
+            } else {
+                console.warn("'Update' button not found.");
+                showToast("Click 'Update' to finish submission.", "warning");
+            }
+        } else {
+            console.warn("'Proceed' button not found on modal.");
+            showToast("Click 'Proceed' on the dialog to continue.", "warning");
+        }
+    } else {
+        console.warn("'Next' button not found.");
+        showToast("Click 'Next' to continue.", "warning");
+    }
+}
+
+// Helper functions for visual highlights and toast notifications
+function showToast(message, type = 'info') {
+    const existing = document.getElementById('bas-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'bas-toast';
+    toast.textContent = message;
+    
+    let bg = 'rgba(44, 62, 80, 0.95)'; // default dark
+    let border = '1px solid rgba(255, 255, 255, 0.2)';
+    if (type === 'success') {
+        bg = 'rgba(26, 188, 156, 0.95)'; // primary teal
+        border = '1px solid #1abc9c';
+    } else if (type === 'error') {
+        bg = 'rgba(231, 76, 60, 0.95)'; // red
+        border = '1px solid #e74c3c';
+    } else if (type === 'warning') {
+        bg = 'rgba(241, 196, 15, 0.95)'; // yellow
+        border = '1px solid #f1c40f';
+    }
+
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%) translateY(100px);
+        background: ${bg};
+        border: ${border};
+        color: white;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        z-index: 100001;
+        transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        pointer-events: none;
+    `;
+
+    document.body.appendChild(toast);
+    
+    // Animate in
+    setTimeout(() => {
+        toast.style.transform = 'translateX(-50%) translateY(0)';
+    }, 50);
+
+    // Animate out
+    setTimeout(() => {
+        toast.style.transform = 'translateX(-50%) translateY(100px)';
+        setTimeout(() => toast.remove(), 400);
+    }, 4500);
+}
+
+function highlightDropzone() {
+    const dropzone = document.querySelector('.uploadfilecontainer') || 
+                      document.querySelector('file-drag-drop') ||
+                      document.querySelector('[appdragdrop]');
+    if (dropzone) {
+        dropzone.style.transition = 'all 0.3s ease';
+        dropzone.style.border = '3px dashed #1abc9c';
+        dropzone.style.backgroundColor = 'rgba(26, 188, 156, 0.1)';
+        dropzone.style.animation = 'bas-pulse 1.5s infinite alternate';
+        
+        if (!document.getElementById('bas-pulse-style')) {
+            const style = document.createElement('style');
+            style.id = 'bas-pulse-style';
+            style.innerHTML = `
+                @keyframes bas-pulse {
+                    from { box-shadow: 0 0 5px rgba(26, 188, 156, 0.2); }
+                    to { box-shadow: 0 0 20px rgba(26, 188, 156, 0.6); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    }
+}
+
+function removeDropzoneHighlight() {
+    const dropzone = document.querySelector('.uploadfilecontainer') || 
+                      document.querySelector('file-drag-drop') ||
+                      document.querySelector('[appdragdrop]');
+    if (dropzone) {
+        dropzone.style.border = '';
+        dropzone.style.backgroundColor = '';
+        dropzone.style.animation = '';
+    }
 }
