@@ -1,6 +1,12 @@
 // Use chrome for universal compatibility
 const api = typeof browser !== "undefined" ? browser : chrome;
 
+// State variable to track if auto-fill workflow is running
+let isAutoFilling = false;
+
+// State variable to temporarily bypass click interception for fallback manual picker
+let isInterceptingClick = true;
+
 // Add a listener for messages from the popup
 api.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "fillForm") {
@@ -35,7 +41,7 @@ function injectOverlayButton() {
     // Only inject on specific paths
     const hash = window.location.hash;
     const isValidPath = hash.includes('smrSecond') || hash.includes('submit-normal') || hash.includes('submit-sku') || hash.includes('regularSubmission');
-    
+
     if (!isValidPath) {
         const existing = document.getElementById('bas-auto-fill-overlay');
         if (existing) existing.remove();
@@ -46,7 +52,7 @@ function injectOverlayButton() {
 
     const btn = document.createElement('button');
     btn.id = 'bas-auto-fill-overlay';
-    
+
     let pageLabel = "BAS";
     if (hash.includes('smrSecond')) pageLabel = "SMR";
     else if (hash.includes('submit-normal') || hash.includes('regularSubmission')) pageLabel = "NORMAL";
@@ -103,7 +109,7 @@ function injectOverlayButton() {
                 btn.innerHTML = 'Filling...';
                 await fillBASForm(preset);
                 btn.innerHTML = 'Done! ✨';
-                
+
                 btn.classList.add('minimized');
                 btn.style.top = '50%';
                 btn.style.left = 'auto';
@@ -114,7 +120,7 @@ function injectOverlayButton() {
                 btn.style.fontSize = '14px';
                 btn.style.background = 'rgba(26, 188, 156, 0.9)';
                 btn.style.border = '1px solid white';
-                
+
                 setTimeout(() => {
                     btn.innerHTML = `🐱 RE-FILL ${pageLabel}`;
                     btn.disabled = false;
@@ -155,17 +161,16 @@ function injectOverlayButton() {
 setInterval(() => {
     injectOverlayButton();
     autoSelectCategoryEmail();
-    autoCloseSuccessModal();
 }, 1000);
 
 async function autoSelectCategoryEmail() {
     const hash = window.location.hash;
     if (!hash.includes('ongoing-submissions') && !hash.includes('mysubmissions-submitter')) return;
-    
+
     // Find Choose Category dropdown
     const matSelects = document.querySelectorAll('mat-select');
     let categorySelect = null;
-    
+
     for (let select of matSelects) {
         const placeholder = select.getAttribute('placeholder') || "";
         const label = select.closest('mat-form-field')?.querySelector('mat-label')?.textContent || "";
@@ -174,7 +179,7 @@ async function autoSelectCategoryEmail() {
             break;
         }
     }
-    
+
     // Fallback: if we are on ongoing-submissions and can't find by label, 
     // it's likely the only mat-select or the first one.
     if (!categorySelect) categorySelect = matSelects[0];
@@ -182,17 +187,17 @@ async function autoSelectCategoryEmail() {
     if (categorySelect) {
         const valueText = categorySelect.querySelector('.mat-mdc-select-value-text, .mat-select-value-text');
         const currentVal = valueText?.textContent.trim();
-        
+
         // Only auto-fill if it's not already "Email" and we haven't done it this "session"
         // We use a property to avoid overriding user changes repeatedly
         if (currentVal !== "Email" && !categorySelect.getAttribute('data-auto-filled')) {
             console.log("Auto-selecting Category: Email");
             const trigger = categorySelect.querySelector('.mat-mdc-select-trigger') || categorySelect;
             trigger.click();
-            
+
             // Wait for the panel to appear
             await sleep(500);
-            
+
             const options = Array.from(document.querySelectorAll('mat-option, .mat-mdc-option, [role="option"]'));
             let found = false;
             for (let opt of options) {
@@ -203,7 +208,7 @@ async function autoSelectCategoryEmail() {
                     break;
                 }
             }
-            
+
             // If not found, maybe the panel didn't open or it's different.
             // Don't mark as auto-filled so it can try again.
             if (!found) {
@@ -218,37 +223,13 @@ async function autoSelectCategoryEmail() {
     }
 }
 
-function autoCloseSuccessModal() {
-    // Search for modal-header with class success
-    const successHeader = document.querySelector('.modal-header.success') || 
-                          Array.from(document.querySelectorAll('.modal-header')).find(el => el.textContent.toLowerCase().includes('success') || el.classList.contains('success'));
-    
-    if (successHeader) {
-        // Find the modal container to search specifically inside it first
-        const modalContainer = successHeader.closest('.modal, mat-dialog-container, .modal-content, .modal-dialog') || document.body;
-        
-        // Find close button
-        const closeBtn = modalContainer.querySelector('.btn-close') || 
-                         modalContainer.querySelector('.close') || 
-                         modalContainer.querySelector('button[aria-label="Close"]') ||
-                         successHeader.querySelector('.btn-close, .close') ||
-                         document.querySelector('.btn-close') ||
-                         document.querySelector('.close');
-        
-        if (closeBtn) {
-            console.log("Success modal detected! Auto-clicking close button...");
-            closeBtn.click();
-            showToast("Successfully submitted and auto-closed success modal! ✨", "success");
-        }
-    }
-}
-
 async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function fillBASForm(preset) {
     console.log("Starting Auto-Fill with preset:", preset.name);
+    isAutoFilling = true;
     const hash = window.location.hash;
 
     const setInputValue = (selector, value) => {
@@ -267,7 +248,7 @@ async function fillBASForm(preset) {
     // 1. Common Text Fields
     setInputValue('input[formcontrolname="submitterName"]', preset.submitterName);
     setInputValue('input[formcontrolname="plEmail"]', preset.plEmail);
-    
+
     // Page specific QuickBuildPath detection
     if (hash.includes('smr')) {
         setInputValue('input[formcontrolname="quickBuildPath"]', preset.quickBuildPath);
@@ -301,14 +282,14 @@ async function fillBASForm(preset) {
     }
 
     // 3. Notification Emails
-    const emailInput = document.querySelector('input[formcontrolname="notificationEmail"]') || 
-                       document.querySelector('.mat-mdc-chip-grid input') ||
-                       document.querySelector('input[placeholder*="Separated by"]');
-    
+    const emailInput = document.querySelector('input[formcontrolname="notificationEmail"]') ||
+        document.querySelector('.mat-mdc-chip-grid input') ||
+        document.querySelector('input[placeholder*="Separated by"]');
+
     if (emailInput && preset.notificationEmails) {
         console.log("Filling Notification Emails...");
         const emails = parseList(preset.notificationEmails);
-        
+
         const existingChips = Array.from(document.querySelectorAll('.mat-mdc-chip-action-label, .mdc-evolution-chip__text-label, mat-chip-row'))
             .map(chip => chip.textContent.trim().toLowerCase());
 
@@ -384,125 +365,119 @@ async function fillBASForm(preset) {
 
     // 5. Automatic File Upload / Dropzone Trigger
     const fileInput = document.querySelector('.uploadfilecontainer input[type="file"]') ||
-                      document.querySelector('file-drag-drop input[type="file"][accept*=".zip"]') || 
-                      document.querySelector('input[type="file"][accept*=".zip"]');
+        document.querySelector('file-drag-drop input[type="file"][accept*=".zip"]') ||
+        document.querySelector('input[type="file"][accept*=".zip"]');
     if (fileInput) {
         console.log("Auto-triggering ZIP folder upload...");
         // Guide user visually since directory picker requires user gesture
         highlightDropzone();
         showToast("Select a folder containing ZIP files for auto-upload.", "info");
-        
+
         try {
             fileInput.click();
         } catch (e) {
             console.warn("Programmatic click on file input failed:", e);
         }
     } else {
-        // If there is no file uploader on this page, proceed directly with form submission steps
-        setTimeout(proceedSteps, 1000);
+        // No file upload dropzone on this page, run the next steps immediately
+        triggerNextSteps();
     }
 
     console.log("Auto-Fill Completed!");
 }
 
-// Helper to extract the model name from the page inputs
-function getModelName() {
-    const baseModelEl = document.querySelector('input[formcontrolname="baseModel"]');
-    if (baseModelEl && baseModelEl.value) {
-        return baseModelEl.value.trim();
-    }
-    const pdaVersionEl = document.querySelector('input[formcontrolname="pdaVersion"]') || 
-                         document.querySelector('input[placeholder*="PDA"]');
-    if (pdaVersionEl && pdaVersionEl.value) {
-        const val = pdaVersionEl.value.trim();
-        const match = val.match(/^([A-Z]\d{3}[A-Z])/i);
-        if (match) {
-            return "SM-" + match[1].toUpperCase();
-        }
-    }
-    return "";
-}
-
-// Listen for click events on the dropzone or file input to enable directory selection or auto-bypass via local server
+// Listen for click events on the dropzone or file input to enable directory selection
 document.addEventListener('click', async (event) => {
     // Only active on specific pages
     const hash = window.location.hash;
     const isFolderUploadPage = hash.includes('submit-normal') || hash.includes('smrSecond') || hash.includes('submit-sku');
     if (!isFolderUploadPage) return;
 
+    if (!isInterceptingClick) return; // Allow normal click (file picker) to proceed
+
     const target = event.target;
-    
+
     // Find the dropzone container or the file input
     const dropzone = target.closest('.uploadfilecontainer') || target.closest('file-drag-drop');
     const isFileInput = target.tagName === 'INPUT' && target.type === 'file';
-    
+
     if (dropzone || isFileInput) {
         // Find the input element associated with it
         const fileInput = isFileInput ? target : (dropzone.querySelector('input[type="file"]') || document.querySelector('input[type="file"][accept*=".zip"]'));
-        
+
         if (fileInput && (!fileInput.accept || fileInput.accept.includes('.zip'))) {
-            // If this is a fallback click triggered from the catch block, let it proceed to open the native dialog
-            if (fileInput.dataset.bypassFallback === 'true') {
-                fileInput.dataset.bypassFallback = 'false';
-                return;
+            // Fallback for browsers that don't support showDirectoryPicker (e.g. Firefox or Brave shields)
+            if (typeof window.showDirectoryPicker === 'undefined') {
+                showToast("Silakan pilih zip files secara manual.", "info");
+                return; // Let the default click/file picker open
             }
 
-            // Prevent default click behavior synchronously to block native file dialog
+            // Intercept click to open directory picker instead of file chooser
             event.preventDefault();
             event.stopPropagation();
-            
+
             // Remove pulsing highlights if active
             removeDropzoneHighlight();
 
-            const modelName = getModelName();
-            console.log("Attempting auto-bypass for folder selection using model:", modelName);
-            
             try {
-                showToast("Bypassing picker. Fetching zip files from local server...", "info");
-                
-                const response = await fetch(`http://127.0.0.1:19000/get-zips?model=${encodeURIComponent(modelName)}`);
-                if (!response.ok) throw new Error("Local server error: " + response.status);
-                
-                const data = await response.json();
-                if (!data.files || data.files.length === 0) {
-                    showToast(`No zip files found in local folder: ${data.folder}`, "warning");
+                console.log("Opening directory picker...");
+                const dirHandle = await window.showDirectoryPicker();
+                showToast("Reading files from selected folder...", "info");
+
+                const zipFiles = [];
+                for await (const entry of dirHandle.values()) {
+                    if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.zip')) {
+                        const file = await entry.getFile();
+                        zipFiles.push(file);
+                    }
+                }
+
+                if (zipFiles.length === 0) {
+                    showToast("No ZIP files found in the selected folder.", "warning");
+                    isAutoFilling = false; // Reset autofill state
                     return;
                 }
-                
-                const zipFiles = data.files.map(f => {
-                    const binary = atob(f.content);
-                    const array = [];
-                    for (let i = 0; i < binary.length; i++) {
-                        array.push(binary.charCodeAt(i));
-                    }
-                    const blob = new Blob([new Uint8Array(array)], { type: 'application/zip' });
-                    return new File([blob], f.name, { type: 'application/zip' });
-                });
-                
+
                 const dataTransfer = new DataTransfer();
                 zipFiles.forEach(file => dataTransfer.items.add(file));
                 fileInput.files = dataTransfer.files;
-                
-                // Dispatch change event to let Angular process the files
+
+                // Dispatch change event to trigger Angular / framework handler
                 fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-                showToast(`Auto-uploaded ${zipFiles.length} zip file(s) from: ${data.folder.split('/').pop()}`, "success");
-                
-                // Automatically proceed with Next -> Proceed -> Update steps
-                setTimeout(proceedSteps, 1000);
+                showToast(`Successfully loaded ${zipFiles.length} ZIP file(s) from folder.`, "success");
+
+                // Trigger the next steps automatically if we are in an auto-filling session
+                if (isAutoFilling) {
+                    isAutoFilling = false;
+                    setTimeout(() => {
+                        triggerNextSteps();
+                    }, 1200); // 1.2s delay to let Angular process the file upload UI
+                }
             } catch (err) {
-                console.warn("Local server auto-bypass failed, falling back to manual picker:", err);
-                
-                // Set fallback flag, enable directory selection, and trigger click again
-                fileInput.webkitdirectory = true;
-                fileInput.directory = true;
-                fileInput.dataset.bypassFallback = 'true';
-                fileInput.click();
+                if (err.name === 'AbortError') {
+                    // User cancelled the directory picker -> fall back to manual file picker
+                    console.log("Directory picker cancelled. Falling back to manual file picker.");
+                    isInterceptingClick = false;
+                    fileInput.click();
+                    setTimeout(() => {
+                        isInterceptingClick = true;
+                    }, 500);
+                } else if (err.name === 'SecurityError' || err.message.toLowerCase().includes('user gesture')) {
+                    console.warn("Directory picker blocked due to user gesture requirement. Waiting for user interaction.");
+                    highlightDropzone();
+                    showToast("Click on the pulsing upload area to select the ZIP folder.", "warning");
+                } else {
+                    console.error("Error reading directory:", err);
+                    showToast("Failed to read directory: " + err.message, "error");
+                    isAutoFilling = false;
+                }
             }
         }
     }
 }, true); // Capture phase is critical to run before other handlers
 
-// Listen for change events on the file input to filter and handle manual folder selection (when helper server is not running)
+// Listen for change events on the file input to detect manual file selection
+// This handles the case where the user cancelled the folder picker and picked files manually
 document.addEventListener('change', (event) => {
     // Only active on specific pages
     const hash = window.location.hash;
@@ -510,105 +485,19 @@ document.addEventListener('change', (event) => {
     if (!isFolderUploadPage) return;
 
     const target = event.target;
-    if (target && target.tagName === 'INPUT' && target.type === 'file' && target.webkitdirectory) {
-        // Stop default propagation so we can filter files before the web app processes them
-        event.stopPropagation();
-        
-        const originalFiles = Array.from(target.files);
-        const zipFiles = originalFiles.filter(file => file.name.toLowerCase().endsWith('.zip'));
-        
-        console.log(`Manual folder upload triggered. Found ${zipFiles.length} zip files out of ${originalFiles.length} files.`);
-        
-        // Reset webkitdirectory so subsequent normal clicks behave normally
-        target.webkitdirectory = false;
-        target.directory = false;
-        
-        if (zipFiles.length === 0) {
-            showToast("No .zip files found in the selected folder.", "warning");
-            target.value = null; // Reset value
-            return;
+    if (target && target.tagName === 'INPUT' && target.type === 'file' &&
+        (target.accept?.includes('.zip') || target.closest('.uploadfilecontainer') || target.closest('file-drag-drop'))) {
+
+        // Only trigger auto-next if we are in an auto-filling session
+        if (isAutoFilling && target.files && target.files.length > 0) {
+            isAutoFilling = false;
+            showToast(`${target.files.length} file(s) selected. Proceeding...`, "success");
+            setTimeout(() => {
+                triggerNextSteps();
+            }, 1200);
         }
-
-        // Set the filtered ZIP files to the input files using DataTransfer
-        const dataTransfer = new DataTransfer();
-        zipFiles.forEach(file => dataTransfer.items.add(file));
-        target.files = dataTransfer.files;
-        
-        // Dispatch new change event to let Angular/framework handle it
-        target.dispatchEvent(new Event('change', { bubbles: true }));
-        showToast(`Successfully uploaded ${zipFiles.length} ZIP file(s) from folder.`, "success");
-        
-        // Automatically proceed with Next -> Proceed -> Update steps
-        setTimeout(proceedSteps, 1000);
     }
-}, true); // Capture phase
-
-// Step-by-step automation: Next -> Proceed (modal) -> Update
-async function proceedSteps() {
-    console.log("Starting next steps automation...");
-    
-    // Wait for any file uploads or spinners to complete
-    await sleep(1500);
-    let attempts = 0;
-    while (attempts < 12) {
-        const progressBar = document.querySelector('.progress-bar');
-        const spinner = document.querySelector('ngx-spinner') || document.querySelector('.spinner-container') || document.querySelector('.spinner');
-        const isUploading = (progressBar && progressBar.style.width !== '100%' && progressBar.style.width !== '0%' && progressBar.style.width !== '') || 
-                            (spinner && (spinner.style.display !== 'none' && !spinner.classList.contains('hidden')));
-        if (!isUploading) break;
-        
-        console.log("Upload or page spinner is active, waiting...");
-        await sleep(1000);
-        attempts++;
-    }
-
-    // 1. Click "Next" button
-    console.log("Clicking 'Next' button...");
-    const nextBtn = Array.from(document.querySelectorAll('button')).find(btn => {
-        const text = btn.textContent.trim().toLowerCase();
-        return text === 'next' || btn.classList.contains('bas-primary-btn');
-    }) || document.querySelector('.bas-primary-btn');
-
-    if (nextBtn) {
-        nextBtn.click();
-        showToast("Clicked 'Next'. Waiting for modal...", "info");
-        await sleep(1500); // Wait for modal to load
-
-        // 2. Click "Proceed" button in the modal
-        console.log("Looking for 'Proceed' button...");
-        const proceedBtn = Array.from(document.querySelectorAll('button, [role="button"], span')).find(el => {
-            const text = el.textContent.trim().toLowerCase();
-            return text === 'proceed' || text === 'yes, proceed' || text.includes('proceed');
-        });
-
-        if (proceedBtn) {
-            proceedBtn.click();
-            showToast("Clicked 'Proceed'. Waiting for transition...", "info");
-            await sleep(1500); // Wait for page transition / update button load
-
-            // 3. Click "Update" button
-            console.log("Looking for 'Update' button...");
-            const updateBtn = Array.from(document.querySelectorAll('button, [role="button"], span')).find(el => {
-                const text = el.textContent.trim().toLowerCase();
-                return text === 'update' || text === 'submit' || text.includes('update');
-            });
-
-            if (updateBtn) {
-                updateBtn.click();
-                showToast("Form successfully updated/submitted! ✨", "success");
-            } else {
-                console.warn("'Update' button not found.");
-                showToast("Click 'Update' to finish submission.", "warning");
-            }
-        } else {
-            console.warn("'Proceed' button not found on modal.");
-            showToast("Click 'Proceed' on the dialog to continue.", "warning");
-        }
-    } else {
-        console.warn("'Next' button not found.");
-        showToast("Click 'Next' to continue.", "warning");
-    }
-}
+}); // Bubble phase - after Angular processes the change
 
 // Helper functions for visual highlights and toast notifications
 function showToast(message, type = 'info') {
@@ -618,7 +507,7 @@ function showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.id = 'bas-toast';
     toast.textContent = message;
-    
+
     let bg = 'rgba(44, 62, 80, 0.95)'; // default dark
     let border = '1px solid rgba(255, 255, 255, 0.2)';
     if (type === 'success') {
@@ -652,7 +541,7 @@ function showToast(message, type = 'info') {
     `;
 
     document.body.appendChild(toast);
-    
+
     // Animate in
     setTimeout(() => {
         toast.style.transform = 'translateX(-50%) translateY(0)';
@@ -666,15 +555,15 @@ function showToast(message, type = 'info') {
 }
 
 function highlightDropzone() {
-    const dropzone = document.querySelector('.uploadfilecontainer') || 
-                      document.querySelector('file-drag-drop') ||
-                      document.querySelector('[appdragdrop]');
+    const dropzone = document.querySelector('.uploadfilecontainer') ||
+        document.querySelector('file-drag-drop') ||
+        document.querySelector('[appdragdrop]');
     if (dropzone) {
         dropzone.style.transition = 'all 0.3s ease';
         dropzone.style.border = '3px dashed #1abc9c';
         dropzone.style.backgroundColor = 'rgba(26, 188, 156, 0.1)';
         dropzone.style.animation = 'bas-pulse 1.5s infinite alternate';
-        
+
         if (!document.getElementById('bas-pulse-style')) {
             const style = document.createElement('style');
             style.id = 'bas-pulse-style';
@@ -690,12 +579,211 @@ function highlightDropzone() {
 }
 
 function removeDropzoneHighlight() {
-    const dropzone = document.querySelector('.uploadfilecontainer') || 
-                      document.querySelector('file-drag-drop') ||
-                      document.querySelector('[appdragdrop]');
+    const dropzone = document.querySelector('.uploadfilecontainer') ||
+        document.querySelector('file-drag-drop') ||
+        document.querySelector('[appdragdrop]');
     if (dropzone) {
         dropzone.style.border = '';
         dropzone.style.backgroundColor = '';
         dropzone.style.animation = '';
     }
 }
+
+// Wait until the progress bar reaches 100% (aria-valuenow="100" or style width 100%)
+async function waitForProgressBar(timeoutMs = 120000) {
+    const startTime = Date.now();
+    showToast("Waiting for upload to complete (100%)...", "info");
+    while (Date.now() - startTime < timeoutMs) {
+        const bar = document.querySelector('.progress-bar.progress-bar-info');
+        if (bar) {
+            const valuenow = parseInt(bar.getAttribute('aria-valuenow') || '0', 10);
+            const widthStyle = parseFloat(bar.style.width || '0');
+            if (valuenow >= 100 || widthStyle >= 100) {
+                console.log("Progress bar reached 100%.");
+                return true;
+            }
+            // Show current progress in toast every ~2 seconds
+            const pct = valuenow || widthStyle;
+            if (Math.round(Date.now() / 2000) % 1 === 0) {
+                showToast(`Uploading... ${pct}%`, "info");
+            }
+        }
+        await sleep(500);
+    }
+    console.warn("Timed out waiting for progress bar to reach 100%.");
+    return false;
+}
+
+// Auto-scroll to bottom, wait for 100% progress, click Next, then click Proceed
+async function triggerNextSteps() {
+    isAutoFilling = false; // Reset state
+    console.log("Auto-scrolling to bottom and clicking Next...");
+    showToast("Scrolling to bottom...", "info");
+    await sleep(800);
+
+    // Smooth scroll to bottom of the page
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    document.documentElement.scrollTop = document.documentElement.scrollHeight;
+    await sleep(800); // Wait for scroll animation
+
+    // Wait until upload progress bar reaches 100% before proceeding
+    const isComplete = await waitForProgressBar(120000); // up to 2 minutes
+    if (!isComplete) {
+        showToast("Upload progress timed out. Proceeding anyway...", "warning");
+    }
+    await sleep(500); // Brief pause after 100%
+
+    showToast("Clicking Next...", "info");
+    const clickedNext = await waitAndClickButton("Next", 8000);
+
+    if (clickedNext) {
+        showToast("Waiting for Proceed modal...", "info");
+        await sleep(500); // Give modal time to appear
+        const clickedProceed = await waitAndClickButton("Proceed", 8000);
+        if (clickedProceed) {
+            showToast("Proceed clicked!", "success");
+        } else {
+            console.warn("Proceed button not found within timeout.");
+        }
+    }
+}
+
+// Helper to find a button by its text content
+function findButtonByText(text) {
+    const term = text.toLowerCase().trim();
+
+    // 1. Search in standard button elements
+    for (const btn of document.querySelectorAll('button')) {
+        if (btn.textContent.toLowerCase().includes(term)) {
+            return btn;
+        }
+    }
+
+    // 2. Search in custom elements with role="button" or common button classes
+    for (const el of document.querySelectorAll('[role="button"], .btn, .button, .bas-primary-btn, .mdc-button')) {
+        if (el.textContent.toLowerCase().includes(term)) {
+            return el;
+        }
+    }
+
+    // 3. Search in span elements (like inside material/mdc buttons)
+    for (const span of document.querySelectorAll('span.mdc-button__label, span.button-text')) {
+        if (span.textContent.toLowerCase().includes(term)) {
+            const parentButton = span.closest('button, [role="button"], a');
+            if (parentButton) return parentButton;
+            return span;
+        }
+    }
+
+    return null;
+}
+
+// Helper to poll for a button and click it once it is clickable
+async function waitAndClickButton(text, timeoutMs = 6000) {
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeoutMs) {
+        const btn = findButtonByText(text);
+        if (btn && !btn.disabled && btn.offsetParent !== null) { // Visible and not disabled
+            console.log(`Found and clicking button: "${text}"`);
+            btn.click();
+            return true;
+        }
+        await sleep(250); // check every 250ms
+    }
+    console.warn(`Button "${text}" not found or not clickable within ${timeoutMs}ms.`);
+    return false;
+}
+
+// MutationObserver: Auto-close modals that contain a success header (.modal-header.success)
+// And handle specific CSC error modals automatically
+const modalObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+            if (node.nodeType !== Node.ELEMENT_NODE) continue;
+
+            // Check if a modal/dialog container was added
+            const isDialog = node.matches?.('mat-dialog-container, .mat-mdc-dialog-container, .modal, [role="dialog"], .cdk-overlay-container, .cdk-global-overlay-wrapper')
+                          || node.querySelector?.('mat-dialog-container, .mat-mdc-dialog-container, .modal, [role="dialog"]');
+
+            if (isDialog) {
+                // Small delay to let Angular render the modal's inner content
+                setTimeout(async () => {
+                    const dialogRoot = node.matches?.('mat-dialog-container, .mat-mdc-dialog-container, [role="dialog"]')
+                        ? node
+                        : node.querySelector('mat-dialog-container, .mat-mdc-dialog-container, [role="dialog"]');
+
+                    if (!dialogRoot) return;
+
+                    // 1. Detect CSC type error modal:
+                    // Class matches or contains the error text: "CSC type Normal is not allowed for OS version... Allowed CSC types are..."
+                    const modalMsgEl = dialogRoot.querySelector('.modal-message');
+                    const modalMsgText = modalMsgEl ? modalMsgEl.textContent : '';
+                    if (modalMsgText.includes("CSC type Normal is not allowed") && modalMsgText.includes("Allowed CSC types are")) {
+                        console.log("CSC type mismatch error modal detected. Auto-adjusting to MultiCSC...");
+                        showToast("CSC type Normal not allowed. Changing to MultiCSC...", "warning");
+
+                        // Find close button for this error modal and click it
+                        const errorCloseBtn = dialogRoot.querySelector('.btn-close') ||
+                                              dialogRoot.querySelector('#btn-close') ||
+                                              dialogRoot.querySelector('button');
+                        if (errorCloseBtn) {
+                            errorCloseBtn.click();
+                        }
+
+                        await sleep(500);
+
+                        // Change CSC type to MultiCSC
+                        const cscSelect = document.querySelector('mat-select[formcontrolname="cscType"]');
+                        if (cscSelect) {
+                            const trigger = cscSelect.querySelector('.mat-mdc-select-trigger') || cscSelect;
+                            trigger.click();
+                            await sleep(600);
+                            const options = Array.from(document.querySelectorAll('mat-option, .mat-mdc-option, [role="option"]'));
+                            for (let opt of options) {
+                                if (opt.textContent.trim().includes("MultiCSC")) {
+                                    opt.click();
+                                    showToast("CSC Type set to MultiCSC. Retrying Next...", "success");
+                                    break;
+                                }
+                            }
+                        }
+
+                        await sleep(800);
+
+                        // Re-trigger the Next steps flow
+                        triggerNextSteps();
+                        return;
+                    }
+
+                    // 2. Only auto-close modals that have a .modal-header.success element
+                    const hasSuccessHeader = dialogRoot.querySelector('.modal-header.success');
+                    if (!hasSuccessHeader) {
+                        console.log("Modal detected but no .modal-header.success — skipping auto-close.");
+                        return;
+                    }
+
+                    // Find the close button
+                    const closeBtn = dialogRoot.querySelector('.btn-close') ||
+                                     dialogRoot.querySelector('#btn-close') ||
+                                     dialogRoot.querySelector('[aria-label*="close" i]') ||
+                                     dialogRoot.querySelector('[aria-label*="Close" i]') ||
+                                     dialogRoot.querySelector('button[mat-dialog-close]') ||
+                                     dialogRoot.querySelector('button[matdialogclose]') ||
+                                     Array.from(dialogRoot.querySelectorAll('button')).find(btn =>
+                                         btn.textContent.trim().toLowerCase() === 'close' ||
+                                         btn.textContent.trim() === '\u00d7' ||
+                                         btn.textContent.trim() === 'X'
+                                     );
+
+                    if (closeBtn && !closeBtn.disabled) {
+                        console.log("Auto-closing success modal...");
+                        closeBtn.click();
+                    }
+                }, 400);
+            }
+        }
+    }
+});
+
+// Start observing DOM for modal additions
+modalObserver.observe(document.body, { childList: true, subtree: true });
