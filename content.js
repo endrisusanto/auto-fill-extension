@@ -161,11 +161,19 @@ function injectOverlayButton() {
 setInterval(() => {
     injectOverlayButton();
     autoSelectCategoryEmail();
+    autoSelectPagination20();
 }, 1000);
 
 async function autoSelectCategoryEmail() {
     const hash = window.location.hash;
     if (!hash.includes('ongoing-submissions') && !hash.includes('mysubmissions-submitter')) return;
+
+    // ponytail: check if page is still loading (spinner / progress bar present)
+    const isSpinnerPresent = document.querySelector('mat-spinner, mat-progress-bar, .spinner, .loading-spinner, .loading');
+    if (isSpinnerPresent) {
+        console.log("Page is still loading (spinner/progress-bar found). Waiting...");
+        return;
+    }
 
     // Find Choose Category dropdown
     const matSelects = document.querySelectorAll('mat-select');
@@ -220,6 +228,43 @@ async function autoSelectCategoryEmail() {
         // If we leave the page, the button/select might be gone, 
         // but just to be safe, we don't need to reset anything here 
         // as categorySelect is local to the function call.
+    }
+}
+
+async function autoSelectPagination20() {
+    // ponytail: check if page is still loading
+    const isSpinnerPresent = document.querySelector('mat-spinner, mat-progress-bar, .spinner, .loading-spinner, .loading');
+    if (isSpinnerPresent) return;
+
+    // ponytail: keep it simple - look for paginator page size select element
+    const paginatorSelect = document.querySelector('mat-select[aria-labelledby*="mat-paginator-page-size-label"]');
+    if (!paginatorSelect) return;
+
+    const valueTextEl = paginatorSelect.querySelector('.mat-mdc-select-value-text, .mat-select-value-text');
+    const currentVal = valueTextEl?.textContent.trim();
+
+    // Only set to 20 if it's currently showing 10 (or anything other than 20)
+    if (currentVal && currentVal !== "20" && !paginatorSelect.getAttribute('data-auto-filled-page')) {
+        console.log("Auto-selecting Pagination page size: 20");
+        const trigger = paginatorSelect.querySelector('.mat-mdc-select-trigger') || paginatorSelect;
+        trigger.click();
+
+        await sleep(500);
+
+        const options = Array.from(document.querySelectorAll('mat-option, .mat-mdc-option, [role="option"]'));
+        let found = false;
+        for (let opt of options) {
+            if (opt.textContent.trim() === "20") {
+                opt.click();
+                paginatorSelect.setAttribute('data-auto-filled-page', 'true');
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            document.body.click(); // Close panel if not found
+        }
     }
 }
 
