@@ -832,3 +832,16 @@ const modalObserver = new MutationObserver((mutations) => {
 
 // Start observing DOM for modal additions
 modalObserver.observe(document.body, { childList: true, subtree: true });
+
+// Trigger BAS session sync to local Project Manager
+try {
+    if (api && api.runtime && api.runtime.sendMessage) {
+        api.runtime.sendMessage({ action: "sync_bas_session" }, () => {
+            if (api.runtime.lastError) {
+                // Ignore silent error
+            }
+        });
+    }
+} catch (e) {
+    // Ignore error
+}
