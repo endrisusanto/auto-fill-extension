@@ -168,93 +168,90 @@ async function autoSelectCategoryEmail() {
     const hash = window.location.hash;
     if (!hash.includes('ongoing-submissions') && !hash.includes('mysubmissions-submitter')) return;
 
-    // ponytail: check if page is still loading (spinner / progress bar present)
-    const isSpinnerPresent = document.querySelector('mat-spinner, mat-progress-bar, .spinner, .loading-spinner, .loading');
-    if (isSpinnerPresent) {
-        console.log("Page is still loading (spinner/progress-bar found). Waiting...");
-        return;
-    }
+    // ponytail: check if page is still loading
+    const isSpinnerPresent = document.querySelector('.ngx-spinner-overlay, mat-spinner, mat-progress-bar, .spinner, .loading-spinner, .loading, .ant-spin-spinning');
+    if (isSpinnerPresent) return;
 
-    // Find Choose Category dropdown
-    const matSelects = document.querySelectorAll('mat-select');
+    // ponytail: support NG-ZORRO filter-control and legacy Angular Material select
     let categorySelect = null;
-
-    for (let select of matSelects) {
-        const placeholder = select.getAttribute('placeholder') || "";
-        const label = select.closest('mat-form-field')?.querySelector('mat-label')?.textContent || "";
-        if (placeholder.includes('Choose Category') || label.includes('Choose Category')) {
-            categorySelect = select;
+    const filterControls = document.querySelectorAll('.filter-control');
+    for (const fc of filterControls) {
+        if (fc.querySelector('.filter-control__label')?.textContent.trim().toLowerCase() === 'category') {
+            categorySelect = fc.querySelector('nz-select, .ant-select');
             break;
         }
     }
 
-    // Fallback: if we are on ongoing-submissions and can't find by label, 
-    // it's likely the only mat-select or the first one.
-    if (!categorySelect) categorySelect = matSelects[0];
-
-    if (categorySelect) {
-        const valueText = categorySelect.querySelector('.mat-mdc-select-value-text, .mat-select-value-text');
-        const currentVal = valueText?.textContent.trim();
-
-        // Only auto-fill if it's not already "Email" and we haven't done it this "session"
-        // We use a property to avoid overriding user changes repeatedly
-        if (currentVal !== "Email" && !categorySelect.getAttribute('data-auto-filled')) {
-            console.log("Auto-selecting Category: Email");
-            const trigger = categorySelect.querySelector('.mat-mdc-select-trigger') || categorySelect;
-            trigger.click();
-
-            // Wait for the panel to appear
-            await sleep(500);
-
-            const options = Array.from(document.querySelectorAll('mat-option, .mat-mdc-option, [role="option"]'));
-            let found = false;
-            for (let opt of options) {
-                if (opt.textContent.trim() === "Email") {
-                    opt.click();
-                    categorySelect.setAttribute('data-auto-filled', 'true');
-                    found = true;
-                    break;
-                }
-            }
-
-            // If not found, maybe the panel didn't open or it's different.
-            // Don't mark as auto-filled so it can try again.
-            if (!found) {
-                // Click outside to close panel if it stayed open
-                document.body.click();
+    if (!categorySelect) {
+        const matSelects = document.querySelectorAll('mat-select:not([aria-labelledby*="paginator"])');
+        for (const select of matSelects) {
+            const placeholder = select.getAttribute('placeholder') || "";
+            const label = select.closest('mat-form-field')?.querySelector('mat-label')?.textContent || "";
+            if (placeholder.includes('Category') || label.includes('Category')) {
+                categorySelect = select;
+                break;
             }
         }
-    } else {
-        // If we leave the page, the button/select might be gone, 
-        // but just to be safe, we don't need to reset anything here 
-        // as categorySelect is local to the function call.
+    }
+
+    if (!categorySelect) return;
+
+    const valueEl = categorySelect.querySelector('.ant-select-selection-item, nz-select-item, .mat-mdc-select-value-text, .mat-select-value-text');
+    const currentVal = valueEl?.textContent.trim();
+
+    if (currentVal !== "Email" && !categorySelect.getAttribute('data-auto-filled')) {
+        console.log("Auto-selecting Category: Email");
+        const trigger = categorySelect.querySelector('.ant-select-selector, nz-select-top-control, .mat-mdc-select-trigger') || categorySelect;
+        trigger.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        trigger.click();
+
+        await sleep(400);
+
+        const options = Array.from(document.querySelectorAll('.ant-select-item-option, nz-option-item, mat-option, .mat-mdc-option, [role="option"]'));
+        let found = false;
+        for (const opt of options) {
+            const text = opt.textContent.trim();
+            const title = opt.getAttribute('title');
+            if (text === "Email" || title === "Email") {
+                opt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                opt.click();
+                categorySelect.setAttribute('data-auto-filled', 'true');
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            document.body.click();
+        }
     }
 }
 
 async function autoSelectPagination20() {
     // ponytail: check if page is still loading
-    const isSpinnerPresent = document.querySelector('mat-spinner, mat-progress-bar, .spinner, .loading-spinner, .loading');
+    const isSpinnerPresent = document.querySelector('.ngx-spinner-overlay, mat-spinner, mat-progress-bar, .spinner, .loading-spinner, .loading, .ant-spin-spinning');
     if (isSpinnerPresent) return;
 
-    // ponytail: keep it simple - look for paginator page size select element
-    const paginatorSelect = document.querySelector('mat-select[aria-labelledby*="mat-paginator-page-size-label"]');
+    // ponytail: look for paginator page size select element
+    const paginatorSelect = document.querySelector('mat-paginator mat-select, mat-select[aria-labelledby*="mat-paginator-page-size-label"], .mat-mdc-paginator-page-size-select mat-select');
     if (!paginatorSelect) return;
 
     const valueTextEl = paginatorSelect.querySelector('.mat-mdc-select-value-text, .mat-select-value-text');
     const currentVal = valueTextEl?.textContent.trim();
 
-    // Only set to 20 if it's currently showing 10 (or anything other than 20)
     if (currentVal && currentVal !== "20" && !paginatorSelect.getAttribute('data-auto-filled-page')) {
         console.log("Auto-selecting Pagination page size: 20");
         const trigger = paginatorSelect.querySelector('.mat-mdc-select-trigger') || paginatorSelect;
+        trigger.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
         trigger.click();
 
         await sleep(500);
 
         const options = Array.from(document.querySelectorAll('mat-option, .mat-mdc-option, [role="option"]'));
         let found = false;
-        for (let opt of options) {
+        for (const opt of options) {
             if (opt.textContent.trim() === "20") {
+                opt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
                 opt.click();
                 paginatorSelect.setAttribute('data-auto-filled-page', 'true');
                 found = true;
@@ -263,7 +260,7 @@ async function autoSelectPagination20() {
         }
 
         if (!found) {
-            document.body.click(); // Close panel if not found
+            document.body.click();
         }
     }
 }

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "auto-fill-extension",
-  "version": "1.1",
-  "description": "Auto fill form and session bridge for Build Approval System",
+  "version": "1.3",
+  "description": "Auto fill form and session bridge for Build Approval System & Mobile R&D Hub",
   "permissions": [
     "activeTab",
     "scripting",
@@ -11,10 +11,19 @@
   ],
   "host_permissions": [
     "https://buildapprovalsystem.com/*",
+    "https://*.mobilerndhub.sec.samsung.net/*",
+    "https://mobilerndhub.sec.samsung.net/*",
+    "https://*.samsung.net/*",
     "http://localhost/*",
     "http://127.0.0.1/*",
     "http://localhost:*/*",
-    "http://127.0.0.1:*/*"
+    "http://127.0.0.1:*/*",
+    "https://gba.endrisusanto.my.id/*",
+    "https://heist.endrisusanto.my.id/*",
+    "http://107.102.39.55/*",
+    "http://107.102.39.55:*/*",
+    "https://107.102.39.55/*",
+    "https://107.102.39.55:*/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -36,8 +45,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://buildapprovalsystem.com/*"],
-      "js": ["content.js"]
+      "matches": [
+        "https://buildapprovalsystem.com/*"
+      ],
+      "js": [
+        "content.js"
+      ]
     }
   ]
 }

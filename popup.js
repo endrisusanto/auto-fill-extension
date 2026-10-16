@@ -23,6 +23,18 @@ const presetList = document.getElementById('presetList');
 const listFooter = document.getElementById('listFooter');
 const presetForm = document.getElementById('presetForm');
 
+// Session Status DOM Elements
+const sessionDot = document.getElementById('sessionDot');
+const sessionStatusText = document.getElementById('sessionStatusText');
+const sessionDetailText = document.getElementById('sessionDetailText');
+const btnSyncSession = document.getElementById('btnSyncSession');
+
+// Mobile R&D Hub Status DOM Elements
+const hubDot = document.getElementById('hubDot');
+const hubStatusText = document.getElementById('hubStatusText');
+const hubDetailText = document.getElementById('hubDetailText');
+const btnSyncHubSession = document.getElementById('btnSyncHubSession');
+
 // Initialize
 async function init() {
     const data = await api.storage.local.get(['bas_presets', 'active_preset_id']);
@@ -36,27 +48,107 @@ async function init() {
 
     activePresetId = data.active_preset_id || 'default';
     renderList();
+    updateSessionStatus();
+    updateHubSessionStatus();
+}
+
+async function updateSessionStatus() {
+    if (!sessionDot || !sessionStatusText) return;
+
+    sessionStatusText.textContent = "Memeriksa token...";
+    sessionDetailText.textContent = "Menghubungkan ke BAS Bridge...";
+
+    // 1. Check local cookies for buildapprovalsystem.com
+    let hasLocalSid = false;
+    let localDevice = false;
+    if (api.cookies && api.cookies.getAll) {
+        try {
+            const cookies = await api.cookies.getAll({ domain: "buildapprovalsystem.com" });
+            if (cookies && cookies.length > 0) {
+                hasLocalSid = cookies.some(c => c.name === "sid");
+                localDevice = cookies.some(c => c.name.includes("VERIFIED_DEVICE"));
+            }
+        } catch (e) {
+            console.error("Error querying cookies:", e);
+        }
+    }
+
+    // 2. Query bridge status via background script
+    api.runtime.sendMessage({ action: "check_bas_status" }, (response) => {
+        const endpoints = response && response.endpoints ? response.endpoints : [];
+        const activeEndpoint = endpoints.find(e => e.reachable && e.active);
+        const reachableEndpoint = endpoints.find(e => e.reachable);
+
+        if (activeEndpoint) {
+            sessionDot.className = 'status-dot active';
+            sessionStatusText.textContent = 'Session Active (Tersambung)';
+            const updated = activeEndpoint.data && activeEndpoint.data.updated_at ? activeEndpoint.data.updated_at : 'Baru saja';
+            const ageH = activeEndpoint.data && activeEndpoint.data.age_hours !== undefined ? activeEndpoint.data.age_hours : '0';
+            sessionDetailText.textContent = 'Update: ' + updated + ' (' + ageH + 'h lalu)';
+        } else if (reachableEndpoint && reachableEndpoint.data && reachableEndpoint.data.status === 'expired') {
+            sessionDot.className = 'status-dot expired';
+            sessionStatusText.textContent = 'Session Expired (>8 Jam)';
+            sessionDetailText.textContent = 'Buka portal BAS di browser untuk refresh token.';
+        } else if (hasLocalSid) {
+            sessionDot.className = 'status-dot active';
+            sessionStatusText.textContent = 'Token Siap di Browser';
+            sessionDetailText.textContent = localDevice ? 'Cookie sid & Device terdeteksi. Klik Sync.' : 'Cookie sid terdeteksi. Klik Sync.';
+        } else {
+            sessionDot.className = 'status-dot disconnected';
+            sessionStatusText.textContent = 'Belum Ada Token BAS';
+            sessionDetailText.textContent = 'Silakan login ke portal Build Approval System.';
+        }
+    });
+}
+
+async function updateHubSessionStatus() {
+    if (!hubDot || !hubStatusText) return;
+
+    hubStatusText.textContent = "Memeriksa Hub...";
+    hubDetailText.textContent = "Menghubungkan ke Heist Hub...";
+
+    api.runtime.sendMessage({ action: "check_hub_status" }, (response) => {
+        const endpoints = response && response.endpoints ? response.endpoints : [];
+        const activeEndpoint = endpoints.find(e => e.reachable && e.active);
+        const reachableEndpoint = endpoints.find(e => e.reachable);
+        const hasLocal = response && response.hasLocalSession;
+        const username = response && response.username ? response.username : 'User';
+        const count = response && response.cookiesCount ? response.cookiesCount : 0;
+
+        if (activeEndpoint) {
+            hubDot.className = 'status-dot active';
+            hubStatusText.textContent = 'Hub Sync: Aktif (' + username + ')';
+            hubDetailText.textContent = 'Tersinkron ke Heist Hub (' + count + ' cookies)';
+        } else if (hasLocal) {
+            hubDot.className = 'status-dot active';
+            hubStatusText.textContent = 'Cookie Siap di Browser (' + username + ')';
+            hubDetailText.textContent = count + ' cookie terdeteksi. Klik Sync Hub.';
+        } else {
+            hubDot.className = 'status-dot disconnected';
+            hubStatusText.textContent = 'Belum Ada Sesi Mobile R&D';
+            hubDetailText.textContent = 'Silakan login ke portal Mobile R&D Hub.';
+        }
+    });
 }
 
 function renderList() {
     presetList.innerHTML = '';
     
     if (presets.length === 0) {
-        presetList.innerHTML = '<div class="empty-state">No presets found. Add one to get started!</div>';
+        presetList.innerHTML = '<div class="empty-state">Belum ada preset. Buat preset baru!</div>';
         return;
     }
 
     presets.forEach(preset => {
         const card = document.createElement('div');
-        card.className = `preset-card ${preset.id === activePresetId ? 'active' : ''}`;
-        card.innerHTML = `
-            <div class="preset-name">${preset.name}</div>
-            <div class="preset-details">${preset.submitterName} • ${preset.carrier || 'No Carrier'}</div>
-            <div class="card-actions">
-                <button class="btn-sm edit-btn" data-id="${preset.id}">Edit</button>
-                <button class="btn-sm danger delete-btn" data-id="${preset.id}">Delete</button>
-            </div>
-        `;
+        card.className = 'preset-card ' + (preset.id === activePresetId ? 'active' : '');
+        card.innerHTML = 
+            '<div class="preset-name">' + preset.name + '</div>' +
+            '<div class="preset-details">' + preset.submitterName + ' • ' + (preset.carrier || 'No Carrier') + '</div>' +
+            '<div class="card-actions">' +
+                '<button class="btn-sm edit-btn" data-id="' + preset.id + '">Edit</button>' +
+                '<button class="btn-sm danger delete-btn" data-id="' + preset.id + '">Delete</button>' +
+            '</div>';
 
         card.addEventListener('click', (e) => {
             if (e.target.tagName === 'BUTTON') return;
@@ -110,11 +202,11 @@ function hideForm() {
 
 async function deletePreset(id) {
     if (presets.length <= 1) {
-        alert("You must have at least one preset.");
+        alert("Harus ada minimal satu preset tersimpan.");
         return;
     }
     
-    if (!confirm("Are you sure you want to delete this preset?")) return;
+    if (!confirm("Apakah Anda yakin ingin menghapus preset ini?")) return;
 
     presets = presets.filter(p => p.id !== id);
     if (activePresetId === id) {
@@ -131,6 +223,34 @@ async function deletePreset(id) {
 // Event Listeners
 document.getElementById('addBtn').addEventListener('click', () => showForm());
 document.getElementById('cancelBtn').addEventListener('click', hideForm);
+
+if (btnSyncHubSession) {
+    btnSyncHubSession.addEventListener('click', () => {
+        btnSyncHubSession.disabled = true;
+        btnSyncHubSession.innerHTML = '<span>⏳</span> Syncing...';
+        api.runtime.sendMessage({ action: "sync_hub_session" }, (res) => {
+            setTimeout(() => {
+                btnSyncHubSession.disabled = false;
+                btnSyncHubSession.innerHTML = '<span>🌐</span> Sync Hub';
+                updateHubSessionStatus();
+            }, 700);
+        });
+    });
+}
+
+if (btnSyncSession) {
+    btnSyncSession.addEventListener('click', () => {
+        btnSyncSession.disabled = true;
+        btnSyncSession.innerHTML = '<span>⏳</span> Syncing...';
+        api.runtime.sendMessage({ action: "sync_bas_session" }, (res) => {
+            setTimeout(() => {
+                btnSyncSession.disabled = false;
+                btnSyncSession.innerHTML = '<span>🔄</span> Sync';
+                updateSessionStatus();
+            }, 700);
+        });
+    });
+}
 
 presetForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -169,7 +289,6 @@ presetForm.addEventListener('submit', async (e) => {
 document.getElementById('fillBtn').addEventListener('click', async () => {
     const tabs = await api.tabs.query({ active: true, currentWindow: true });
     if (tabs[0]) {
-        // Send the specific preset data so content script doesn't have to fetch it (though it could)
         const preset = presets.find(p => p.id === activePresetId);
         api.tabs.sendMessage(tabs[0].id, { 
             action: "fillForm",
