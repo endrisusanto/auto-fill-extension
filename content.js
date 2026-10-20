@@ -164,128 +164,154 @@ let isSubmissionsAutomating = false;
 setInterval(() => {
     injectOverlayButton();
     runSubmissionsWorkflow();
-    injectApVersionSearch();
+    setupSmartQuickLookup();
 }, 1000);
 
-// ponytail: inject AP Version quick search on searchSubmissions page
-function injectApVersionSearch() {
+// ponytail: smart search detection on master Quick lookup input (Submission ID / Fingerprint / AP Version)
+function detectSearchType(query) {
+    const q = (query || "").trim();
+    if (!q) return 'empty';
+    if (/^\d+$/.test(q)) return 'id';
+    if (/^[a-fA-F0-9]{64}$/.test(q)) return 'digest';
+    if (q.includes('/') || q.includes(':')) return 'fingerprint';
+    return 'apVersion';
+}
+
+function setupSmartQuickLookup() {
     const hash = window.location.hash;
     const isSearchPage = hash.includes('searchSubmissions');
-    const existing = document.getElementById('bas-ap-lookup-container');
-
-    if (!isSearchPage) {
-        if (existing) existing.remove();
-        return;
-    }
-
-    if (existing) return;
-
+    const idInput = document.getElementById('id');
     const heroCard = document.querySelector('.card.card--hero, section.card--hero');
-    if (!heroCard) return;
 
-    const container = document.createElement('div');
-    container.id = 'bas-ap-lookup-container';
-    container.style.cssText = 'margin-top: 18px; padding-top: 16px; border-top: 1px dashed #d7e9e6;';
+    // Remove legacy injected container if it was previously rendered
+    const oldContainer = document.getElementById('bas-ap-lookup-container');
+    if (oldContainer) oldContainer.remove();
 
-    container.innerHTML = `
-        <div class="card__head--inline" style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-            <span class="material-icons" style="font-size:18px; width:18px; height:18px; color:#0f766e;">layers</span>
-            <h2 style="margin:0; font-size:15px; font-weight:600; color:#10171d;">Quick lookup by AP Version</h2>
-            <span class="tag" style="background:#e6f4f2; color:#0f766e; border:1px solid #c6e0dc; border-radius:6px; font-size:11px; padding:2px 8px; font-weight:500;">Extension</span>
-        </div>
-        <div class="lookup" style="display:flex; gap:10px;">
-            <div class="lookup__box" style="display:flex; align-items:center; flex:1 1 auto; min-width:0; height:46px; padding:0 15px; background:#fff; border:1px solid #e4e7ea; border-radius:10px; box-shadow:0 1px 2px rgba(16,24,32,0.05);">
-                <input id="bas-ap-input" type="text" placeholder="e.g. S928BXXU1AXB5..." class="lookup__input" style="flex:1 1 auto; min-width:0; border:0; outline:0; background:transparent; font-size:14px; color:#10171d; caret-color:#0f766e;">
-            </div>
-            <button id="bas-ap-search-btn" type="button" class="btn btn--primary btn--lg" style="height:46px; padding:0 24px; font-size:14px; border-radius:10px; background:#0f766e; color:#fff; border:1px solid #0f766e; font-weight:500; cursor:pointer;">Search AP</button>
-            <button id="bas-ap-clear-btn" type="button" class="btn btn--ghost btn--lg" style="height:46px; padding:0 24px; font-size:14px; border-radius:10px; background:#fff; color:#55606b; border:1px solid #e4e7ea; font-weight:500; cursor:pointer;">Clear</button>
-        </div>
-        <p class="card__hint" style="margin:8px 0 0; font-size:12px; color:#55606b;">Cari submission berdasarkan AP Version secara langsung tanpa perlu membuka accordion Advanced Search.</p>
-    `;
+    if (!isSearchPage || !idInput || !heroCard) return;
 
-    const inputEl = container.querySelector('#bas-ap-input');
-    const searchBtn = container.querySelector('#bas-ap-search-btn');
-    const clearBtn = container.querySelector('#bas-ap-clear-btn');
+    if (idInput.dataset.smartLookupInit === 'true') return;
+    idInput.dataset.smartLookupInit = 'true';
 
-    // Sync if target apVersion input already has a value
-    const existingApInput = document.getElementById('apVersion');
-    if (existingApInput && existingApInput.value) {
-        inputEl.value = existingApInput.value;
+    // Update title and placeholder to reflect smart detection
+    const cardTitle = heroCard.querySelector('.card__head h2');
+    if (cardTitle && !cardTitle.textContent.includes('AP Version')) {
+        cardTitle.textContent = 'Quick lookup by Submission ID, Fingerprint, or AP Version';
     }
 
-    const executeApSearch = async () => {
-        const val = inputEl.value.trim();
-        if (!val) {
-            inputEl.focus();
-            return;
-        }
+    const cardHint = heroCard.querySelector('.card__hint');
+    if (cardHint) {
+        cardHint.textContent = 'Smart Search: otomatis mendeteksi Submission ID, Fingerprint, atau AP Version (Advanced Search tetap collapse).';
+    }
 
-        searchBtn.disabled = true;
-        searchBtn.textContent = 'Searching...';
+    idInput.placeholder = 'e.g. 5623576921374724, Fingerprint, or AP Version (G556BXXSJEZJ3)...';
 
-        try {
-            // ponytail: clear master id field so BAS does not prioritize id lookup
-            const idInput = document.getElementById('id');
-            if (idInput && idInput.value) {
+    // Find the Search and Clear buttons in the lookup box
+    const lookupContainer = idInput.closest('.lookup') || heroCard.querySelector('.lookup');
+    const searchBtn = lookupContainer?.querySelector('button.btn--primary');
+    const clearBtn = lookupContainer?.querySelector('button.btn--ghost');
+
+    let isExecuting = false;
+
+    const handleSmartSearch = async (e) => {
+        if (isExecuting) return;
+        const rawVal = idInput.value.trim();
+        const type = detectSearchType(rawVal);
+
+        // If it is an AP Version, intercept native quickLookup and route to apVersion
+        if (type === 'apVersion') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            isExecuting = true;
+
+            const apVal = rawVal.toUpperCase();
+            if (searchBtn) {
+                searchBtn.disabled = true;
+                searchBtn.textContent = 'Searching AP...';
+            }
+
+            try {
+                // 1. Clear input#id in Angular reactive form so it does not trigger quick lookup by ID
                 idInput.value = '';
                 idInput.dispatchEvent(new Event('input', { bubbles: true }));
                 idInput.dispatchEvent(new Event('change', { bubbles: true }));
-            }
 
-            // ponytail: open advanced panel if apVersion input is not yet in DOM
-            let targetAp = document.getElementById('apVersion');
-            if (!targetAp) {
-                const advToggle = document.querySelector('.adv-toggle');
-                if (advToggle) {
-                    advToggle.click();
-                    await sleep(150);
-                    targetAp = document.getElementById('apVersion');
+                // 2. Open advanced search briefly if apVersion input is not in DOM
+                let targetAp = document.getElementById('apVersion');
+                let reCollapse = false;
+
+                if (!targetAp) {
+                    const advToggle = document.querySelector('.adv-toggle');
+                    if (advToggle) {
+                        advToggle.click();
+                        await sleep(100);
+                        targetAp = document.getElementById('apVersion');
+                        reCollapse = true;
+                    }
+                }
+
+                if (targetAp) {
+                    targetAp.value = apVal;
+                    targetAp.dispatchEvent(new Event('input', { bubbles: true }));
+                    targetAp.dispatchEvent(new Event('change', { bubbles: true }));
+                    targetAp.dispatchEvent(new Event('blur', { bubbles: true }));
+                }
+
+                // ponytail: immediately re-collapse Advanced Search so it stays collapsed!
+                if (reCollapse) {
+                    const advToggle = document.querySelector('.adv-toggle');
+                    if (advToggle) {
+                        advToggle.click();
+                        await sleep(50);
+                    }
+                }
+
+                // 3. Trigger main BAS search button
+                const formSearchBtn = Array.from(document.querySelectorAll('.actions__btns button.btn--primary'))
+                    .find(b => b.textContent.trim().includes('Search')) || document.querySelector('.actions__btns .btn--primary');
+
+                if (formSearchBtn) {
+                    formSearchBtn.click();
+                }
+            } finally {
+                // Restore value in input box for user visibility
+                idInput.value = apVal;
+                if (searchBtn) {
+                    setTimeout(() => {
+                        searchBtn.disabled = false;
+                        searchBtn.textContent = 'Search';
+                        isExecuting = false;
+                    }, 600);
+                } else {
+                    isExecuting = false;
                 }
             }
+        }
+        // If type is 'id', 'fingerprint', or 'digest', let native BAS handler run untouched!
+    };
 
+    if (searchBtn) {
+        searchBtn.addEventListener('click', handleSmartSearch, true);
+    }
+
+    idInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const rawVal = idInput.value.trim();
+            if (detectSearchType(rawVal) === 'apVersion') {
+                handleSmartSearch(e);
+            }
+        }
+    }, true);
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            const targetAp = document.getElementById('apVersion');
             if (targetAp) {
-                targetAp.value = val;
+                targetAp.value = '';
                 targetAp.dispatchEvent(new Event('input', { bubbles: true }));
                 targetAp.dispatchEvent(new Event('change', { bubbles: true }));
-                targetAp.dispatchEvent(new Event('blur', { bubbles: true }));
             }
-
-            // ponytail: trigger standard BAS search button in actions bar
-            const formSearchBtn = Array.from(document.querySelectorAll('.actions__btns button.btn--primary'))
-                .find(b => b.textContent.trim().includes('Search')) || document.querySelector('.actions__btns .btn--primary');
-
-            if (formSearchBtn) {
-                formSearchBtn.click();
-            }
-        } finally {
-            setTimeout(() => {
-                searchBtn.disabled = false;
-                searchBtn.textContent = 'Search AP';
-            }, 600);
-        }
-    };
-
-    searchBtn.onclick = executeApSearch;
-
-    inputEl.onkeydown = (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            executeApSearch();
-        }
-    };
-
-    clearBtn.onclick = () => {
-        inputEl.value = '';
-        const targetAp = document.getElementById('apVersion');
-        if (targetAp) {
-            targetAp.value = '';
-            targetAp.dispatchEvent(new Event('input', { bubbles: true }));
-            targetAp.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        inputEl.focus();
-    };
-
-    heroCard.appendChild(container);
+        });
+    }
 }
 
 async function runSubmissionsWorkflow() {
