@@ -157,21 +157,42 @@ function injectOverlayButton() {
     document.body.appendChild(btn);
 }
 
+// ponytail: lock to prevent concurrent execution during interval ticks
+let isSubmissionsAutomating = false;
+
 // Periodically check for injection (Better for SPAs)
 setInterval(() => {
     injectOverlayButton();
-    autoSelectCategoryEmail();
-    autoSelectPagination20();
+    runSubmissionsWorkflow();
 }, 1000);
 
-async function autoSelectCategoryEmail() {
-    const hash = window.location.hash;
-    if (!hash.includes('ongoing-submissions') && !hash.includes('mysubmissions-submitter')) return;
+async function runSubmissionsWorkflow() {
+    if (isSubmissionsAutomating) return;
 
     // ponytail: check if page is still loading
     const isSpinnerPresent = document.querySelector('.ngx-spinner-overlay, mat-spinner, mat-progress-bar, .spinner, .loading-spinner, .loading, .ant-spin-spinning');
     if (isSpinnerPresent) return;
 
+    isSubmissionsAutomating = true;
+    try {
+        const hash = window.location.hash;
+        const isSubmissionsPage = hash.includes('ongoing-submissions') || hash.includes('mysubmissions-submitter');
+
+        // ponytail: avoid race condition by ensuring Category is Email before pagination
+        if (isSubmissionsPage) {
+            const isCategoryEmail = await autoSelectCategoryEmail();
+            if (isCategoryEmail) {
+                await autoSelectPagination20();
+            }
+        } else {
+            await autoSelectPagination20();
+        }
+    } finally {
+        isSubmissionsAutomating = false;
+    }
+}
+
+async function autoSelectCategoryEmail() {
     // ponytail: support NG-ZORRO filter-control and legacy Angular Material select
     let categorySelect = null;
     const filterControls = document.querySelectorAll('.filter-control');
@@ -194,12 +215,14 @@ async function autoSelectCategoryEmail() {
         }
     }
 
-    if (!categorySelect) return;
+    if (!categorySelect) return false;
 
     const valueEl = categorySelect.querySelector('.ant-select-selection-item, nz-select-item, .mat-mdc-select-value-text, .mat-select-value-text');
     const currentVal = valueEl?.textContent.trim();
 
-    if (currentVal !== "Email" && !categorySelect.getAttribute('data-auto-filled')) {
+    if (currentVal === "Email") return true;
+
+    if (!categorySelect.getAttribute('data-auto-filled')) {
         console.log("Auto-selecting Category: Email");
         const trigger = categorySelect.querySelector('.ant-select-selector, nz-select-top-control, .mat-mdc-select-trigger') || categorySelect;
         trigger.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -225,13 +248,11 @@ async function autoSelectCategoryEmail() {
             document.body.click();
         }
     }
+
+    return false;
 }
 
 async function autoSelectPagination20() {
-    // ponytail: check if page is still loading
-    const isSpinnerPresent = document.querySelector('.ngx-spinner-overlay, mat-spinner, mat-progress-bar, .spinner, .loading-spinner, .loading, .ant-spin-spinning');
-    if (isSpinnerPresent) return;
-
     // ponytail: look for paginator page size select element
     const paginatorSelect = document.querySelector('mat-paginator mat-select, mat-select[aria-labelledby*="mat-paginator-page-size-label"], .mat-mdc-paginator-page-size-select mat-select');
     if (!paginatorSelect) return;
