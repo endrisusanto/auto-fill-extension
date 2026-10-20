@@ -164,7 +164,129 @@ let isSubmissionsAutomating = false;
 setInterval(() => {
     injectOverlayButton();
     runSubmissionsWorkflow();
+    injectApVersionSearch();
 }, 1000);
+
+// ponytail: inject AP Version quick search on searchSubmissions page
+function injectApVersionSearch() {
+    const hash = window.location.hash;
+    const isSearchPage = hash.includes('searchSubmissions');
+    const existing = document.getElementById('bas-ap-lookup-container');
+
+    if (!isSearchPage) {
+        if (existing) existing.remove();
+        return;
+    }
+
+    if (existing) return;
+
+    const heroCard = document.querySelector('.card.card--hero, section.card--hero');
+    if (!heroCard) return;
+
+    const container = document.createElement('div');
+    container.id = 'bas-ap-lookup-container';
+    container.style.cssText = 'margin-top: 18px; padding-top: 16px; border-top: 1px dashed #d7e9e6;';
+
+    container.innerHTML = `
+        <div class="card__head--inline" style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+            <span class="material-icons" style="font-size:18px; width:18px; height:18px; color:#0f766e;">layers</span>
+            <h2 style="margin:0; font-size:15px; font-weight:600; color:#10171d;">Quick lookup by AP Version</h2>
+            <span class="tag" style="background:#e6f4f2; color:#0f766e; border:1px solid #c6e0dc; border-radius:6px; font-size:11px; padding:2px 8px; font-weight:500;">Extension</span>
+        </div>
+        <div class="lookup" style="display:flex; gap:10px;">
+            <div class="lookup__box" style="display:flex; align-items:center; flex:1 1 auto; min-width:0; height:46px; padding:0 15px; background:#fff; border:1px solid #e4e7ea; border-radius:10px; box-shadow:0 1px 2px rgba(16,24,32,0.05);">
+                <input id="bas-ap-input" type="text" placeholder="e.g. S928BXXU1AXB5..." class="lookup__input" style="flex:1 1 auto; min-width:0; border:0; outline:0; background:transparent; font-size:14px; color:#10171d; caret-color:#0f766e;">
+            </div>
+            <button id="bas-ap-search-btn" type="button" class="btn btn--primary btn--lg" style="height:46px; padding:0 24px; font-size:14px; border-radius:10px; background:#0f766e; color:#fff; border:1px solid #0f766e; font-weight:500; cursor:pointer;">Search AP</button>
+            <button id="bas-ap-clear-btn" type="button" class="btn btn--ghost btn--lg" style="height:46px; padding:0 24px; font-size:14px; border-radius:10px; background:#fff; color:#55606b; border:1px solid #e4e7ea; font-weight:500; cursor:pointer;">Clear</button>
+        </div>
+        <p class="card__hint" style="margin:8px 0 0; font-size:12px; color:#55606b;">Cari submission berdasarkan AP Version secara langsung tanpa perlu membuka accordion Advanced Search.</p>
+    `;
+
+    const inputEl = container.querySelector('#bas-ap-input');
+    const searchBtn = container.querySelector('#bas-ap-search-btn');
+    const clearBtn = container.querySelector('#bas-ap-clear-btn');
+
+    // Sync if target apVersion input already has a value
+    const existingApInput = document.getElementById('apVersion');
+    if (existingApInput && existingApInput.value) {
+        inputEl.value = existingApInput.value;
+    }
+
+    const executeApSearch = async () => {
+        const val = inputEl.value.trim();
+        if (!val) {
+            inputEl.focus();
+            return;
+        }
+
+        searchBtn.disabled = true;
+        searchBtn.textContent = 'Searching...';
+
+        try {
+            // ponytail: clear master id field so BAS does not prioritize id lookup
+            const idInput = document.getElementById('id');
+            if (idInput && idInput.value) {
+                idInput.value = '';
+                idInput.dispatchEvent(new Event('input', { bubbles: true }));
+                idInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            // ponytail: open advanced panel if apVersion input is not yet in DOM
+            let targetAp = document.getElementById('apVersion');
+            if (!targetAp) {
+                const advToggle = document.querySelector('.adv-toggle');
+                if (advToggle) {
+                    advToggle.click();
+                    await sleep(150);
+                    targetAp = document.getElementById('apVersion');
+                }
+            }
+
+            if (targetAp) {
+                targetAp.value = val;
+                targetAp.dispatchEvent(new Event('input', { bubbles: true }));
+                targetAp.dispatchEvent(new Event('change', { bubbles: true }));
+                targetAp.dispatchEvent(new Event('blur', { bubbles: true }));
+            }
+
+            // ponytail: trigger standard BAS search button in actions bar
+            const formSearchBtn = Array.from(document.querySelectorAll('.actions__btns button.btn--primary'))
+                .find(b => b.textContent.trim().includes('Search')) || document.querySelector('.actions__btns .btn--primary');
+
+            if (formSearchBtn) {
+                formSearchBtn.click();
+            }
+        } finally {
+            setTimeout(() => {
+                searchBtn.disabled = false;
+                searchBtn.textContent = 'Search AP';
+            }, 600);
+        }
+    };
+
+    searchBtn.onclick = executeApSearch;
+
+    inputEl.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            executeApSearch();
+        }
+    };
+
+    clearBtn.onclick = () => {
+        inputEl.value = '';
+        const targetAp = document.getElementById('apVersion');
+        if (targetAp) {
+            targetAp.value = '';
+            targetAp.dispatchEvent(new Event('input', { bubbles: true }));
+            targetAp.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        inputEl.focus();
+    };
+
+    heroCard.appendChild(container);
+}
 
 async function runSubmissionsWorkflow() {
     if (isSubmissionsAutomating) return;
